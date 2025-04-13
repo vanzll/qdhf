@@ -39,6 +39,8 @@ class GridArchive(ArchiveBase):
 
     def __init__(self, dims, ranges, seed=None, dtype=np.float64):
         self._dims = np.array(dims)
+        # dims = [20, 30, 40]三个维度
+        # ranges [(-1, 1), (-2, 2)]
         if len(self._dims) != len(ranges):
             raise ValueError(f"dims (length {len(self._dims)}) and ranges "
                              f"(length {len(ranges)}) must be the same length")
@@ -51,10 +53,11 @@ class GridArchive(ArchiveBase):
             dtype=dtype,
         )
 
-        ranges = list(zip(*ranges))
+        ranges = list(zip(*ranges)) 
+        # self._boundaries 是一个包含两个 numpy.ndarray 的列表，每个 numpy.ndarray 有 51 个边界值
         self._lower_bounds = np.array(ranges[0], dtype=self.dtype)
         self._upper_bounds = np.array(ranges[1], dtype=self.dtype)
-        self._interval_size = self._upper_bounds - self._lower_bounds
+        self._interval_size = self._upper_bounds - self._lower_bounds # bin的大小
 
         self._boundaries = []
         for dim, lower_bound, upper_bound in zip(self._dims, self._lower_bounds,
@@ -115,7 +118,7 @@ class GridArchive(ArchiveBase):
         # the grid.
         behavior_values = np.minimum(
             np.maximum(behavior_values + _EPSILON, lower_bounds),
-            upper_bounds - _EPSILON)
+            upper_bounds - _EPSILON) # 防止超出范围
 
         index = (behavior_values - lower_bounds) / interval_size * dims
         return index.astype(np.int32)

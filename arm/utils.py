@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import numpy as np
 import time
-
+from generate_noise import NoiseGenerator
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -38,15 +38,17 @@ class DisEmbed(nn.Module):
 
 
 def fit_dis_embed(
-    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu"
+    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None
 ):
+    # 这个函数使用 triplet-based contrastive learning，训练一个模型在嵌入空间中表示“人类感知下的多样性”
+    # inputs是随机产生的角度
     t = time.time()
     model = DisEmbed(input_dim=inputs.shape[-1], latent_dim=latent_dim)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = lambda y, delta_dis: torch.max(
         torch.tensor([0.0]), 0.05 - y * delta_dis
-    ).mean()
+    ).mean()  # hinge triplet loss
     n_pref_data = inputs.shape[0]
     ref = inputs[:, 0]
     x1 = inputs[:, 1]
@@ -99,9 +101,14 @@ def fit_dis_embed(
                 ),
                 -1,
             )
-            gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1
+            # print("abs(gt_dis) percentiles:",np.percentile(np.abs(gt_dis), [0, 5, 10, 20, 30, 50, 60, 70, 90, 100]))
+            noise_gen = NoiseGenerator()
 
-            loss = loss_fn(gt, delta_dis)
+            gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1 # 产生无噪声标签
+            gt_noise = noise_gen.generate_noise(
+                gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
+            
+            loss = loss_fn(gt_noise, delta_dis)
             loss.backward()
             optimizer.step()
 
