@@ -27,3 +27,4 @@ venv.bak/
 
 # Local outputs
 logs/
+lsi/models/
