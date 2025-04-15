@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import numpy as np
 import time
-
+from generate_noise import NoiseGenerator
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -34,7 +34,7 @@ class DisEmbed(nn.Module):
 
 
 def fit_dis_embed(
-    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu"
+    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None
 ):
     t = time.time()
     inputs = np.array(inputs)
@@ -98,8 +98,11 @@ def fit_dis_embed(
                 -1,
             )
             gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1
+            noise_gen = NoiseGenerator()
+            gt_noise = noise_gen.generate_noise(
+                gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
 
-            loss = loss_fn(gt, delta_dis)
+            loss = loss_fn(gt_noise, delta_dis)
             loss.backward()
             optimizer.step()
 

@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import matplotlib
 import numpy as np
 import torch
+import argparse
 from alive_progress import alive_bar
 from kheperax.task import KheperaxConfig, KheperaxTask
 from qdax.core.emitters.mutation_operators import isoline_variation
@@ -223,6 +224,8 @@ def run_experiment(
     n_pref_data=1000,
     online_finetune=False,
     incre_bounds=False,
+    noisy_method=None,
+    parameter=None
 ):
     algorithm = "map_elites"
     device = "cpu"
@@ -266,9 +269,9 @@ def run_experiment(
         iso_sigma=iso_sigma,
         line_sigma=line_sigma,
     )
-
+    num_parameter = parameter * 100
     # Create a directory for this specific trial.
-    s_logdir = os.path.join(outdir, f"{algorithm}_trial_{trial_id}")
+    s_logdir = os.path.join(outdir, f"{noisy_method}_trial{trial_id}_{num_parameter}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
         logdir.mkdir()
@@ -358,6 +361,8 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method = noisy_method,
+                            parameter = parameter
                         )
                     else:
                         dis_embed = None
@@ -400,6 +405,8 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method = noisy_method,
+                            parameter = parameter
                         )
 
                     all_sols = list_to_batch(all_sols)
@@ -615,6 +622,9 @@ def arm_main(
     n_pref_data=1000,
     online_finetune=False,
     incre_bounds=False,
+    seed=None,
+    noisy_method=None,
+    parameter=None
 ):
     """Experimental tool for the planar robotic arm experiments."""
 
@@ -633,36 +643,45 @@ def arm_main(
         outdir=outdir,
         log_freq=log_freq,
         log_arch_freq=log_arch_freq,
-        seed=trial_id,
+        seed=seed,
         use_dis_embed=use_dis_embed,
         n_pref_data=n_pref_data,
         online_finetune=online_finetune,
         incre_bounds=incre_bounds,
+        noisy_method=noisy_method,
+        parameter=parameter
     )
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        trial_id = int(sys.argv[1])
-    else:
-        trial_id = 0
+    parser = argparse.ArgumentParser(
+        description="Run robot arm experiments")
+    parser.add_argument('--trial_id', type=int, default=0)
+    parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+    parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--seed', type=int, required=True)
+    args = parser.parse_args()
 
     # QD-GT
-    arm_main(trial_id, method="qd")
+    # arm_main(trial_id, method="qd")
 
-    # AURORA
-    for method in ["pca", "ae"]:
-        for online_finetune in [True, False]:
-            arm_main(trial_id, method=method, online_finetune=online_finetune)
+    # # AURORA
+    # for method in ["pca", "ae"]:
+    #     for online_finetune in [True, False]:
+    #         arm_main(trial_id, method=method, online_finetune=online_finetune)
 
     # QDHF
     n_pref_data = 200
-    for online_finetune in [False, True]:
+    for online_finetune in [True]: # False,
         data = n_pref_data if not online_finetune else n_pref_data // 4
         arm_main(
-            trial_id,
+            trial_id=args.trial_id,
             method="qdhf",
             use_dis_embed=True,
             n_pref_data=data,
             online_finetune=online_finetune,
+            noisy_method=args.noisy_method,
+            parameter=args.parameter,
+            seed=args.seed
         )
