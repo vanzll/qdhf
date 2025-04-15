@@ -30,7 +30,7 @@ def make_archive_collage(archive_filename, prompt, save_all=False):
     gen_output_dir = os.path.join("logs/vis", archive_filename.split("/")[1])
     gen_output_dir = Path(gen_output_dir)
     if not gen_output_dir.is_dir():
-        gen_output_dir.mkdir()
+        gen_output_dir.mkdir(parents=True, exist_ok=True)
 
     model_id = "stabilityai/stable-diffusion-2-1-base"
 

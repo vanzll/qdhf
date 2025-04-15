@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from sklearn.decomposition import PCA
 from torch import nn
-
+from generate_noise import NoiseGenerator
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -32,7 +32,7 @@ class DisEmbed(nn.Module):
 
 
 def fit_dis_embed(
-    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu"
+    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None
 ):
     t = time.time()
     model = DisEmbed(input_dim=inputs.shape[-1], latent_dim=latent_dim)
@@ -83,9 +83,12 @@ def fit_dis_embed(
             ) - torch.nn.functional.cosine_similarity(
                 ref_gt_train[idx], x1_gt_train[idx], dim=-1
             )
-            gt = (gt_dis > 0).float() * 2 - 1
+            gt = (gt_dis > 0).float() * 2 - 1 # 产生标签
+            noise_gen = NoiseGenerator()
+            noisy_gt = noise_gen.generate_noise(
+                gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
 
-            loss = loss_fn(gt, delta_dis)
+            loss = loss_fn(noisy_gt, delta_dis)
             loss.backward()
             optimizer.step()
 
