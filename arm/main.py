@@ -235,7 +235,8 @@ def run_experiment(
         torch.manual_seed(seed)
 
     # Create a directory for this specific trial.
-    s_logdir = os.path.join(outdir, f"{algorithm}_trial_{trial_id}")
+    num_parameter = 100* parameter
+    s_logdir = os.path.join(outdir, f"{noisy_method}_{num_parameter}_trial{trial_id}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
         logdir.mkdir()
@@ -600,16 +601,16 @@ if __name__ == "__main__":
 
     # QDHF
     n_pref_data = 1000
-    arm_main(
-        method="qdhf",
-        trial_id=args.trial_id,
-        use_dis_embed=True,
-        n_pref_data=n_pref_data,
-        online_finetune=False,
-        noisy_method=args.noisy_method,
-        parameter=args.parameter,
-        seed=args.seed
-    )
+    # arm_main(
+    #     method="qdhf",
+    #     trial_id=args.trial_id,
+    #     use_dis_embed=True,
+    #     n_pref_data=n_pref_data,
+    #     online_finetune=False,
+    #     noisy_method=args.noisy_method,
+    #     parameter=args.parameter,
+    #     seed=args.seed
+    # )
     arm_main(
         method="qdhf",
         trial_id=args.trial_id,
