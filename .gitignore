@@ -27,3 +27,9 @@ venv.bak/
 
 # Local outputs
 logs/
+lsi/models/
+
+*.pth
+*.zip
+
+RIME/
