@@ -1,7 +1,7 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 
-# python main.py --seed 1111 --trial_id 50 --noisy_method stochastic --parameter 0.05
+python main.py --seed 1234 --trial_id 10 --noisy_method stochastic --parameter 0.05
 
-python run_experiment.py
+# python run_experiment.py

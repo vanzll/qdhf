@@ -6,17 +6,17 @@ import os  # 用于检查文件是否存在
 
 # 实验设置
 noisy_methods = {
-    "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    # "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
     "stochastic": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
     # "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
     # "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
-    # "flip_labels_asymmetric": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    # "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 }
 base_trial_ids = {
     "stochastic": 10,
     "add_equal_noise": 20,
     "flip_by_distance": 30,
-    "flip_labels_asymmetric": 40,
+    "flip_labels_asymmetric": 43,
     "noisy_labels_exact": 50
 }
 seeds = ["1111", "2222", "3333", "4444"]
