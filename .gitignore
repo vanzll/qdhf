@@ -28,6 +28,7 @@ venv.bak/
 # Local outputs
 logs/
 lsi/models/
+robust_logs/
 
 *.pth
 *.zip
