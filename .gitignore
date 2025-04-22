@@ -29,6 +29,8 @@ venv.bak/
 logs/
 lsi/models/
 robust_logs/
+reweight_logs/
+truncated_logs/
 
 *.pth
 *.zip
