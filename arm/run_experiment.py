@@ -6,10 +6,10 @@ import os  # 用于检查文件是否存在
 
 # 实验设置
 noisy_methods = {
-    "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-    "stochastic": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-    "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
-    "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
+    # "noisy_labels_exact": [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    # "stochastic": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    # "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
+    # "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
     "flip_labels_asymmetric": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 }
 base_trial_ids = {
@@ -23,8 +23,7 @@ seeds = ["1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
 
 # 主逻辑
 for method, params in noisy_methods.items():
-    # 为每种噪声方法生成不同的 CSV 文件路径
-    csv_path = f"/mnt/nvme3n1/qdhf/arm/{method}_experiment_results.csv"
+    csv_path = f"/mnt/data6t/qdhf/arm/reweight_logs/{method}_experiment_results.csv"
 
     # 检查文件是否存在，如果存在则跳过创建
     if os.path.exists(csv_path):

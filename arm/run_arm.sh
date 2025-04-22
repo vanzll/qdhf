@@ -3,7 +3,7 @@
 export CUDA_VISIBLE_DEVICES=0
 
 # python run_experiment.py
-python main.py --seed 1234 --trial_id 52 --noisy_method noisy_labels_exact --parameter 0.2
+python main.py --seed 1111 --trial_id 54 --noisy_method noisy_labels_exact --parameter 0.3 --robust_loss label_smoothing
 # 设置噪声方法和对应的参数列表
 # declare -A noisy_methods
 # noisy_methods["stochastic"]='0.05 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9'

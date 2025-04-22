@@ -4,6 +4,7 @@ from torch import nn
 import numpy as np
 import time
 from generate_noise import NoiseGenerator
+from robust_loss import RobustLossAgent
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -38,7 +39,7 @@ class DisEmbed(nn.Module):
 
 
 def fit_dis_embed(
-    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None
+    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None, robust_loss=None
 ):
     # 这个函数使用 triplet-based contrastive learning，训练一个模型在嵌入空间中表示“人类感知下的多样性”
     # inputs是随机产生的角度
@@ -108,7 +109,11 @@ def fit_dis_embed(
             gt_noise = noise_gen.generate_noise(
                 gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
             
-            loss = loss_fn(gt_noise, delta_dis)
+            # loss = loss_fn(gt_noise, delta_dis)
+            loss_agent = RobustLossAgent(margin=0.05)
+
+            # 使用 Reweighted loss
+            loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, epoch=epoch)
             loss.backward()
             optimizer.step()
 

@@ -225,7 +225,8 @@ def run_experiment(
     online_finetune=False,
     incre_bounds=False,
     noisy_method=None,
-    parameter=None
+    parameter=None,
+    robust_loss=None
 ):
     algorithm = "map_elites"
     device = "cpu"
@@ -235,7 +236,7 @@ def run_experiment(
         torch.manual_seed(seed)
 
     # Create a directory for this specific trial.
-    num_parameter = 100* parameter
+    num_parameter = str(100* parameter)
     s_logdir = os.path.join(outdir, f"{noisy_method}_{num_parameter}_trial{trial_id}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
@@ -316,7 +317,8 @@ def run_experiment(
                             latent_dim=2,
                             seed=seed,
                             noisy_method=noisy_method,
-                            parameter=parameter
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
                     else:
                         dis_embed = None
@@ -352,7 +354,8 @@ def run_experiment(
                             latent_dim=2,
                             seed=seed,
                             noisy_method=noisy_method,
-                            parameter=parameter
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
                         # model, acc
 
@@ -531,7 +534,7 @@ def arm_main(
     dim=10,
     init_pop=100,
     itrs=1000,
-    outdir="logs",
+    outdir='logs',
     log_freq=20,
     log_arch_freq=100,
     use_dis_embed=False,
@@ -540,7 +543,8 @@ def arm_main(
     incre_bounds=False,
     noisy_method=None,
     parameter=None,
-    seed=None
+    seed=None,
+    robust_loss=None
 ):
     """Experimental tool for the planar robotic arm experiments."""
 
@@ -565,7 +569,8 @@ def arm_main(
         online_finetune=online_finetune,
         incre_bounds=incre_bounds,
         noisy_method=noisy_method,
-        parameter=parameter
+        parameter=parameter,
+        robust_loss=robust_loss
     )
 
 
@@ -581,6 +586,7 @@ if __name__ == "__main__":
     parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
                         'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
     parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--robust_loss',type=str,required=True)
     parser.add_argument('--seed', type=int, required=True)
     args = parser.parse_args()
     # QD-GT
@@ -601,6 +607,7 @@ if __name__ == "__main__":
 
     # QDHF
     n_pref_data = 1000
+    out_dir = f'{args.robust_loss}_logs'
     # arm_main(
     #     method="qdhf",
     #     trial_id=args.trial_id,
@@ -614,10 +621,12 @@ if __name__ == "__main__":
     arm_main(
         method="qdhf",
         trial_id=args.trial_id,
+        outdir=out_dir,
         use_dis_embed=True,
         n_pref_data=n_pref_data // 4,
         online_finetune=True,
         noisy_method=args.noisy_method,
         parameter=args.parameter,
-        seed=args.seed
+        seed=args.seed,
+        robust_loss=args.robust_loss
     )
