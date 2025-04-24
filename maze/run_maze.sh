@@ -1,7 +1,9 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=7
 
-python main.py --seed 1234 --trial_id 10 --noisy_method stochastic --parameter 0.05
+python run_experiment.py --noise_type stochastic --robust None --device cpu
+# noisy_labels_exact stochastic flip_labels_asymmetric
+# source .venv/bin/activate
 
-# python run_experiment.py
+# ./run_maze.sh

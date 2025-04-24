@@ -264,11 +264,13 @@ def run_experiment(
     online_finetune=False,
     incre_bounds=False,
     noisy_method=None,
-    parameter=None
+    parameter=None,
+    robust_loss=None,
+    device='cpu'
 ):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "false"
     algorithm = "map_elites"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
 
     np.random.seed(seed)
     torch.manual_seed(seed) # 
@@ -404,7 +406,8 @@ def run_experiment(
                             seed=seed,
                             device=device,
                             noisy_method=noisy_method,
-                            parameter=parameter
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
                     else:
                         dis_embed = None
@@ -458,7 +461,8 @@ def run_experiment(
                             seed=seed,
                             device=device,
                             noisy_method=noisy_method,
-                            parameter=parameter
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
 
                 metadata["dis_embed"] = dis_embed
@@ -585,32 +589,47 @@ def run_experiment(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate an image based on a prompt.")
-    parser.add_argument('--prompt', type=str, default="a photo of an astronaut riding a horse on mars")
+    parser = argparse.ArgumentParser(
+        description="Run robot arm experiments")
+    # parser.add_argument('--trial_id', type=int, default=0)
+    parser.add_argument('--prompt', type=str, default='a photo of an astronaut riding a horse on mars')
     parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
-                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True, default='stochastic')
-    parser.add_argument('--parameter', type=float, required=True, default=0.1)
-    parser.add_argument('--seed', type=int, required=True, default=42)
-    
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+    parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--robust_loss',type=str,required=True)
+    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    parser.add_argument('--cuda_index', type=int, default=0)
 
-    # 解析命令行参数
     args = parser.parse_args()
+    
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{args.cuda_index}')
+        else:
+            print("⚠️ CUDA was requested but is not available. Falling back to CPU.")
+            device = torch.device('cpu')
+    else:
+        device = torch.device('cpu')
 
     # Create a shared logging directory for the experiments for this algorithm.
-    outdir = Path("logs")
-    if not outdir.is_dir():
-        outdir.mkdir()
+        
+    out_dir = f'logs/{args.robust_loss}_logs'
+    os.makedirs(out_dir, exist_ok=True)
 
     run_experiment(
         "qdhf",
         args.prompt,
+        outdir=out_dir,
         itrs=1000,        
         use_dis_embed=True,
         n_pref_data=10000 // 4,
         online_finetune=True,
         noisy_method=args.noisy_method,
         parameter=args.parameter,
-        seed=args.seed
+        seed=args.seed,
+        robust_loss=args.robust_loss,
+        device=device
     )
 
     parameter_str = str(args.parameter).replace(".", "_")

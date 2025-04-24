@@ -2,29 +2,39 @@ import subprocess
 import pandas as pd
 import numpy as np
 import re
-import os  # 用于检查文件是否存在
+import os  
+import gc
+import time
+import torch
+import argparse
+
+parser = argparse.ArgumentParser(description="Run QDHF experiments with config")
+parser.add_argument("--noise_type", type=str, required=True)
+parser.add_argument("--robust", type=str)
+parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+args = parser.parse_args()
 
 # 实验设置
-noisy_methods = {
-    # "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+noisy_list = {
+    "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
     "stochastic": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-    # "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
-    # "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
-    # "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
+    "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
+    "flip_labels_asymmetric": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 }
+noisy_methods = {args.noise_type: noisy_list[args.noise_type]}
 base_trial_ids = {
     "stochastic": 10,
     "add_equal_noise": 20,
     "flip_by_distance": 30,
-    "flip_labels_asymmetric": 43,
+    "flip_labels_asymmetric": 40,
     "noisy_labels_exact": 50
 }
 seeds = ["1111", "2222", "3333", "4444"]
 
 # 主逻辑
 for method, params in noisy_methods.items():
-    # 为每种噪声方法生成不同的 CSV 文件路径
-    csv_path = f"/mnt/nvme3n1/qdhf/maze/{method}_experiment_results.csv"
+    csv_path = f"/mnt/data6t/qdhf/maze/{args.robust}_logs/{method}_experiment_results.csv"
 
     # 检查文件是否存在，如果存在则跳过创建
     if os.path.exists(csv_path):
@@ -39,21 +49,21 @@ for method, params in noisy_methods.items():
 
         qd_scores = []
         coverage_scores = []
+        
 
         for seed in seeds:
-            print(f"Running experiment with method={method}, param={param}, trial_id={trial_id}, seed={seed}")
-            # 实际运行调用（如果要跑真实代码，可以取消注释）
+            print(f"Running experiment with method={method}, param={param}, robust={args.robust}, trial_id={trial_id}, seed={seed}")
             result = subprocess.run(
                 ["python", "main.py", "--seed", seed, "--trial_id", str(trial_id),
-                 "--noisy_method", method, "--parameter", str(param)],
+                 "--noisy_method", method, "--parameter", str(param), "--robust_loss", 
+                 args.robust, "--device", args.device],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
+            result.check_returncode()
             output = result.stdout
             print(output)
 
-            # 提取 QD score 和 Coverage（从最后一行提取）
             try:
-                # 使用正则表达式匹配 QD score 和 Coverage
                 match = re.search(r"QD score: ([\d\.]+) Coverage: ([\d\.]+)", output)
                 if match:
                     qd_score = float(match.group(1))
@@ -75,17 +85,18 @@ for method, params in noisy_methods.items():
                 "QD Score": qd_score,
                 "Coverage": coverage
             }
-            # 如果是第一次写入，写表头，否则追加
+
             pd.DataFrame([record]).to_csv(csv_path, mode='a', header=header_written, index=False)
             header_written = False  # 只有第一次写入时才写表头
+            
+            gc.collect()
+            time.sleep(2)
 
-        # 可选：如果需要添加统计数据（均值和标准差），可以在此进行计算
         qd_mean = np.nanmean(qd_scores)
         qd_std = np.nanstd(qd_scores)
         coverage_mean = np.nanmean(coverage_scores)
         coverage_std = np.nanstd(coverage_scores)
 
-        # 将统计数据写入 CSV
         stats_record = {
             "Method": method,
             "Parameter": param,

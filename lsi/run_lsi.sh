@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=0
+# export CUDA_VISIBLE_DEVICES=5
 
-python main.py --noisy_method noisy_labels_exact --parameter 0.5 --seed 1111
+python main.py --seed 2222 --noisy_method stochastic --parameter 0.3 --robust_loss None --device cpu --cuda_index 5
 #python run_experiment.py

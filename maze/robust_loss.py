@@ -9,16 +9,16 @@ class RobustLossAgent:
         robust_parameter = robust_parameter or {}
 
         if robust_loss == 'reweight':
-            beta = robust_parameter.get("beta", 0.2)
+            beta = 0.2
             return self.reweighted_triplet_loss(delta_dis, y, beta=beta)
 
         elif robust_loss == 'truncated':
-            alpha = robust_parameter.get("alpha", 0.05)
-            epsilon_max = robust_parameter.get("epsilon_max", 0.2)
+            alpha = 0.05
+            epsilon_max = 0.2
             return self.truncated_triplet_loss(delta_dis, y, epoch, alpha=alpha, epsilon_max=epsilon_max)
         
         elif robust_loss == 'label_smoothing':
-            alpha = robust_parameter.get("alpha", 0.05)
+            alpha = 0.05
             return self.label_smoothing_triplet_loss(delta_dis, y, alpha=alpha)
         
         elif robust_loss == 'rDPO':

@@ -1,6 +1,5 @@
 import torch
 
-
 class NoiseGenerator:
     def __init__(self):
         pass
@@ -37,7 +36,7 @@ class NoiseGenerator:
         gt_dis_tensor = torch.tensor(gt_dis, dtype=torch.float32)
         prob = torch.sigmoid(-gt_dis_tensor[noise_indices])
         sampled = torch.bernoulli(prob)
-        noisy_labels = sampled * 2 - 1
+        noisy_labels = sampled * 2 - 1 
 
         gt[noise_indices] = noisy_labels
         return gt
@@ -47,7 +46,7 @@ class NoiseGenerator:
         equal_mask = torch.abs(gt_dis_tensor) < delta_equal
 
         gt_noisy = gt.clone()
-        gt_noisy[equal_mask] = 0
+        gt_noisy[equal_mask] = 0  
         return gt_noisy
 
     def flip_by_distance(self, gt, gt_dis, delta_threshold):
@@ -55,7 +54,7 @@ class NoiseGenerator:
         flip_mask = torch.abs(gt_dis_tensor) < delta_threshold
 
         gt_noisy = gt.clone()
-        gt_noisy[flip_mask] = -gt_noisy[flip_mask]
+        gt_noisy[flip_mask] = -gt_noisy[flip_mask] 
         return gt_noisy
 
     def flip_labels_asymmetric(self, gt, flip_rate=0.1):
