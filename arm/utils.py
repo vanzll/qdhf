@@ -4,7 +4,7 @@ from torch import nn
 import numpy as np
 import time
 from generate_noise import NoiseGenerator
-from robust_loss import RobustLossAgent
+from robust_loss import RobustLossAgent, TripletCDRP
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -43,6 +43,7 @@ def fit_dis_embed(
 ):
     # 这个函数使用 triplet-based contrastive learning，训练一个模型在嵌入空间中表示“人类感知下的多样性”
     # inputs是随机产生的角度
+    # print(device)
     t = time.time()
     model = DisEmbed(input_dim=inputs.shape[-1], latent_dim=latent_dim)
     model.to(device)
@@ -94,7 +95,7 @@ def fit_dis_embed(
             batch2 = torch.tensor(x2_train[idx], dtype=torch.float32).to(device)
 
             optimizer.zero_grad()
-            delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
+            
             gt_dis = np.sum(
                 (
                     np.square(ref_gt_train[idx] - x1_gt_train[idx])
@@ -104,16 +105,23 @@ def fit_dis_embed(
             )
             # print("abs(gt_dis) percentiles:",np.percentile(np.abs(gt_dis), [0, 5, 10, 20, 30, 50, 60, 70, 90, 100]))
             noise_gen = NoiseGenerator()
-
             gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1 # 产生无噪声标签
             gt_noise = noise_gen.generate_noise(
                 gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
             
             # loss = loss_fn(gt_noise, delta_dis)
-            loss_agent = RobustLossAgent(margin=0.05)
-
+            
             # 使用 Reweighted loss
-            loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, epoch=epoch)
+            if robust_loss == 'crdo':
+                ref_embed = model.forward(batch_ref).to(device)
+                x1_embed  = model.forward(batch1).to(device)
+                x2_embed  = model.forward(batch2).to(device)
+                triplet_loss_fn = TripletCDRP(gamma=5.0, eta=0.5, eps=0.01).to(device)
+                loss = triplet_loss_fn(ref_embed, x1_embed, x2_embed, gt_noise).to(device)
+            else:
+                loss_agent = RobustLossAgent(margin=0.05)
+                delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
+                loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, parameter, epoch, device).to(device)
             loss.backward()
             optimizer.step()
 
@@ -122,9 +130,9 @@ def fit_dis_embed(
         n_total = 0
         with torch.no_grad():
             idx = np.arange(n_val)
-            batch_ref = torch.tensor(ref_val[idx], dtype=torch.float32)
-            batch1 = torch.tensor(x1_val[idx], dtype=torch.float32)
-            batch2 = torch.tensor(x2_val[idx], dtype=torch.float32)
+            batch_ref = torch.tensor(ref_val[idx], dtype=torch.float32).to(device)
+            batch1 = torch.tensor(x1_val[idx], dtype=torch.float32).to(device)
+            batch2 = torch.tensor(x2_val[idx], dtype=torch.float32).to(device)
             delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
             pred = delta_dis > 0
             gt_dis = np.sum(
@@ -134,7 +142,7 @@ def fit_dis_embed(
                 ),
                 -1,
             )
-            gt = torch.tensor(gt_dis > 0)
+            gt = torch.tensor(gt_dis > 0).to(device)
             n_correct += (pred == gt).sum().item()
             n_total += len(idx)
 

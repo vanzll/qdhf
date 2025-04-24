@@ -124,7 +124,7 @@ def create_optimizer(
 
     if method == "qd":
         assert gt_bounds is not None
-        objs, measures = evaluate_grasp(sols, method, metadata)
+        objs, measures = evaluate_grasp(sols, method, metadata, device)
         if archive_bounds is None:
             archive_bounds = gt_bounds
     elif method == "pca":
@@ -226,10 +226,10 @@ def run_experiment(
     incre_bounds=False,
     noisy_method=None,
     parameter=None,
-    robust_loss=None
+    robust_loss=None,
+    device='cpu'
 ):
     algorithm = "map_elites"
-    device = "cpu"
 
     if seed is not None:
         np.random.seed(seed)
@@ -308,7 +308,7 @@ def run_experiment(
                         inputs = np.random.uniform(
                             low=-np.pi, high=np.pi, size=(n_pref_data * 3, dim)
                         )
-                        _, gt_measures = evaluate_grasp(inputs, method="qd") # gt_measure就是机械臂末端位置
+                        _, gt_measures = evaluate_grasp(inputs, method="qd", device=device) # gt_measure就是机械臂末端位置
                         dis_embed_data = inputs.reshape((n_pref_data, 3, dim))
                         dis_embed_gt_measures = gt_measures.reshape((n_pref_data, 3, 2))
                         dis_embed, dis_embed_acc = fit_dis_embed(
@@ -318,7 +318,8 @@ def run_experiment(
                             seed=seed,
                             noisy_method=noisy_method,
                             parameter=parameter,
-                            robust_loss=robust_loss
+                            robust_loss=robust_loss,
+                            device=device
                         )
                     else:
                         dis_embed = None
@@ -337,7 +338,7 @@ def run_experiment(
                         additional_inputs = np.array(additional_inputs)
                         _, additional_gt_measures = evaluate_grasp(
                             additional_inputs.reshape(n_pref_data * 3, dim),
-                            method="qd",
+                            method="qd", device=device
                         )
                         additional_gt_measures = additional_gt_measures.reshape(
                             n_pref_data, 3, 2
@@ -355,7 +356,8 @@ def run_experiment(
                             seed=seed,
                             noisy_method=noisy_method,
                             parameter=parameter,
-                            robust_loss=robust_loss
+                            robust_loss=robust_loss,
+                            device=device
                         )
                         # model, acc
 
@@ -389,7 +391,7 @@ def run_experiment(
                 # Optimizer(archive,emitters,init_archive=False)
                 archive_bounds = metadata["archive_bounds"]
 
-                _objs, _gt_measures = evaluate_grasp(all_sols, method="qd")
+                _objs, _gt_measures = evaluate_grasp(all_sols, method="qd", device=device)
                 for i in range(len(all_sols)):
                     gt_archive_all.add(all_sols[i], _objs[i], _gt_measures[i])
 
@@ -400,7 +402,7 @@ def run_experiment(
             )
             best = max(best, max(objs))
 
-            _objs, _gt_measures = evaluate_grasp(sols, method="qd")
+            _objs, _gt_measures = evaluate_grasp(sols, method="qd", device=device)
             for i in range(len(sols)):
                 gt_archive_all.add(sols[i], _objs[i], _gt_measures[i])
 
@@ -458,7 +460,7 @@ def run_experiment(
                 gt_archive = GridArchive((50, 50), gt_archive_bounds, seed=seed)
                 gt_archive.initialize(dim)
                 sols = archive.data()[0]
-                objs, gt_measures = evaluate_grasp(sols, method="qd")
+                objs, gt_measures = evaluate_grasp(sols, method="qd",device=device)
                 for i in range(len(sols)):
                     gt_archive.add(sols[i], objs[i], gt_measures[i])
 
@@ -544,7 +546,8 @@ def arm_main(
     noisy_method=None,
     parameter=None,
     seed=None,
-    robust_loss=None
+    robust_loss=None,
+    device='cpu'
 ):
     """Experimental tool for the planar robotic arm experiments."""
 
@@ -570,7 +573,8 @@ def arm_main(
         incre_bounds=incre_bounds,
         noisy_method=noisy_method,
         parameter=parameter,
-        robust_loss=robust_loss
+        robust_loss=robust_loss,
+        device=device
     )
 
 
@@ -588,6 +592,9 @@ if __name__ == "__main__":
     parser.add_argument('--parameter', type=float, required=True)
     parser.add_argument('--robust_loss',type=str,required=True)
     parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    parser.add_argument('--cuda_index', type=int, default=0)
+
     args = parser.parse_args()
     # QD-GT
     #  arm_main(method="qd", trial_id=trial_id)
@@ -605,9 +612,19 @@ if __name__ == "__main__":
     #        online_finetune=online_finetune,
     #    )
 
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{args.cuda_index}')
+        else:
+            print("⚠️ CUDA was requested but is not available. Falling back to CPU.")
+            device = torch.device('cpu')
+    else:
+        device = torch.device('cpu')
+
     # QDHF
     n_pref_data = 1000
-    out_dir = f'{args.robust_loss}_logs'
+    out_dir = f'logs/{args.robust_loss}_logs'
+    os.makedirs(out_dir, exist_ok=True)
     # arm_main(
     #     method="qdhf",
     #     trial_id=args.trial_id,
@@ -628,5 +645,12 @@ if __name__ == "__main__":
         noisy_method=args.noisy_method,
         parameter=args.parameter,
         seed=args.seed,
-        robust_loss=args.robust_loss
+        robust_loss=args.robust_loss,
+        device=device
     )
+    
+    if args.device == 'cuda':
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+    sys.exit(0)
