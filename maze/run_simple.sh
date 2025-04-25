@@ -1,5 +1,5 @@
 #!/bin/bash
 
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
-python main.py --seed 2222 --trial_id 53 --noisy_method stochastic --parameter 0.3 --robust_loss rDPO --device cpu --cuda_index 7
+python main.py --seed 2222 --trial_id 51 --noisy_method noisy_labels_exact --parameter 0.05 --robust_loss None --device cpu --cuda_index 0
