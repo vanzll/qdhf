@@ -34,7 +34,7 @@ seeds = ["1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
 
 # 主逻辑
 for method, params in noisy_methods.items():
-    csv_path = f"/mnt/data6t/qdhf/arm/{args.robust}_logs/{method}_experiment_results.csv"
+    csv_path = f"/mnt/data6t/qdhf/arm/logs/{args.robust}_logs/{method}_experiment_results.csv"
 
     # 检查文件是否存在，如果存在则跳过创建
     if os.path.exists(csv_path):

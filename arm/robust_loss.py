@@ -9,16 +9,16 @@ class RobustLossAgent:
         robust_parameter = robust_parameter or {}
 
         if robust_loss == 'reweight':
-            beta = robust_parameter.get("beta", 0.2)
+            beta = 0.2
             return self.reweighted_triplet_loss(delta_dis, y, beta=beta)
 
         elif robust_loss == 'truncated':
-            alpha = robust_parameter.get("alpha", 0.05)
-            epsilon_max = robust_parameter.get("epsilon_max", 0.2)
+            alpha = 0.05
+            epsilon_max = 0.2
             return self.truncated_triplet_loss(delta_dis, y, epoch, alpha=alpha, epsilon_max=epsilon_max)
         
         elif robust_loss == 'label_smoothing':
-            alpha = robust_parameter.get("alpha", 0.05)
+            alpha = 0.05
             return self.label_smoothing_triplet_loss(delta_dis, y, alpha=alpha)
         
         elif robust_loss == 'rDPO':
@@ -30,9 +30,14 @@ class RobustLossAgent:
             return self.cDPO_triplet_loss(delta_dis, y, epsilon=epsilon)
         
         elif robust_loss == 'None':
-            loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0]), 0.05 - y * delta_dis).mean()
+            loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0], device=y.device), 0.05 - y * delta_dis).mean()
             return loss_fn(y, delta_dis)
-
+        
+        elif robust_loss == 'robust_qdhf':
+            # beta = 0.2
+            # return self.reweighted_triplet_loss(delta_dis, y, beta=beta)
+            loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0], device=y.device), 0.05 - y * delta_dis).mean()
+            return loss_fn(y, delta_dis)
         else:
             raise ValueError(f"unknown robust method: {robust_loss}")
 

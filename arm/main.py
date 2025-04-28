@@ -319,7 +319,8 @@ def run_experiment(
                             noisy_method=noisy_method,
                             parameter=parameter,
                             robust_loss=robust_loss,
-                            device=device
+                            device=device,
+                            itr=itr
                         )
                     else:
                         dis_embed = None
@@ -357,7 +358,9 @@ def run_experiment(
                             noisy_method=noisy_method,
                             parameter=parameter,
                             robust_loss=robust_loss,
-                            device=device
+                            device=device,
+                            itr=itr,
+                            all_sols=all_sols
                         )
                         # model, acc
 
