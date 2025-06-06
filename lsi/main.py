@@ -597,7 +597,7 @@ if __name__ == "__main__":
                         'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
     parser.add_argument('--parameter', type=float, required=True)
     parser.add_argument('--robust_loss',type=str,required=True)
-    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--seed', type=int, required=False)
     parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
     parser.add_argument('--cuda_index', type=int, default=0)
 
@@ -625,28 +625,30 @@ if __name__ == "__main__":
         "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
         "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]}
     
-    for noisy_method, noisy_rates in noisy_list.items():
-        
-        for noisy_rate in noisy_rates:
-            for seed in seeds:
-                print(f"Running experiment with seed {seed}")
-                run_experiment(
-                    "qdhf",
-                    args.prompt,
-                    outdir=out_dir,
-                    itrs=1000,        
-                    use_dis_embed=True,
-                    n_pref_data=10000 // 4,
-                    online_finetune=True,
-                    noisy_method=noisy_method,
-                    parameter=noisy_rate,
-                    seed=seed,
-                    robust_loss=args.robust_loss,
-                    device=device
-                )
-
-            parameter_str = str(args.parameter).replace(".", "_")
-            archive_filename = (
-                f"logs/map_elites_{args.prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
+    
+    noisy_method = args.noisy_method
+    noisy_rates = noisy_list[noisy_method]
+    
+    for noisy_rate in noisy_rates:
+        for seed in seeds:
+            print(f"Running experiment with seed {seed}")
+            run_experiment(
+                "qdhf",
+                args.prompt,
+                outdir=out_dir,
+                itrs=1000,        
+                use_dis_embed=True,
+                n_pref_data=10000 // 4,
+                online_finetune=True,
+                noisy_method=noisy_method,
+                parameter=noisy_rate,
+                seed=seed,
+                robust_loss=args.robust_loss,
+                device=device
             )
-            # make_archive_collage(archive_filename, args.prompt)
+
+        parameter_str = str(args.parameter).replace(".", "_")
+        archive_filename = (
+            f"logs/map_elites_{args.prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
+        )
+        # make_archive_collage(archive_filename, args.prompt)
