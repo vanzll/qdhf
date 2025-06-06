@@ -94,8 +94,8 @@ def fit_dis_embed(
             x2_embed = model.forward(batch2)
 
             gt_dis = np.sum(
-                np.square(ref_gt_train[batch_idx] - x1_gt_train[batch_idx]) -
-                np.square(ref_gt_train[batch_idx] - x2_gt_train[batch_idx]),
+                np.square(ref_gt_train[batch_idx].cpu().numpy() - x1_gt_train[batch_idx].cpu().numpy()) -
+                np.square(ref_gt_train[batch_idx].cpu().numpy() - x2_gt_train[batch_idx].cpu().numpy()),
                 axis=-1
             )
             gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1
@@ -130,8 +130,8 @@ def fit_dis_embed(
                 
                 gt_dis = np.sum(
                     (
-                        np.square(ref_gt_train[idx] - x1_gt_train[idx])
-                        - np.square(ref_gt_train[idx] - x2_gt_train[idx])
+                        np.square(ref_gt_train[idx].cpu().numpy() - x1_gt_train[idx].cpu().numpy())
+                        - np.square(ref_gt_train[idx].cpu().numpy() - x2_gt_train[idx].cpu().numpy())
                     ),
                     -1,
                 )
@@ -153,7 +153,9 @@ def fit_dis_embed(
                 else:
                     loss_agent = RobustLossAgent(margin=0.05)
                     delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
-                    loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, parameter, epoch, device).to(device)
+                    delta_dis = delta_dis.to(device)
+                    gt_noise = gt_noise.to(device)
+                    loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, parameter, epoch, device)
                 loss.backward()
                 optimizer.step()
 

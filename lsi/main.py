@@ -544,7 +544,7 @@ def run_experiment(
     print(log_file_name, "| QD score:", data[1], "Coverage:", data[2])
     print()
     
-    csv_path = f"/mnt/nvme3n1/qdhf/lsi/{method}_experiment_results.csv"
+    csv_path = f"logs/{method}_{noisy_method}_experiment_results.csv"
     header_written = not os.path.exists(csv_path)
     record = {
         "Method": method,
@@ -616,24 +616,37 @@ if __name__ == "__main__":
         
     out_dir = f'logs/{args.robust_loss}_logs'
     os.makedirs(out_dir, exist_ok=True)
+    
+    seeds = [1111, 2222, 3333, 4444]
+    noisy_list = {
+        "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], # 0.05, 0.1, 0.2, 
+        "stochastic": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
+        "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
+        "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]}
+    
+    for noisy_method, noisy_rates in noisy_list.items():
+        
+        for noisy_rate in noisy_rates:
+            for seed in seeds:
+                print(f"Running experiment with seed {seed}")
+                run_experiment(
+                    "qdhf",
+                    args.prompt,
+                    outdir=out_dir,
+                    itrs=1000,        
+                    use_dis_embed=True,
+                    n_pref_data=10000 // 4,
+                    online_finetune=True,
+                    noisy_method=noisy_method,
+                    parameter=noisy_rate,
+                    seed=seed,
+                    robust_loss=args.robust_loss,
+                    device=device
+                )
 
-    run_experiment(
-        "qdhf",
-        args.prompt,
-        outdir=out_dir,
-        itrs=1000,        
-        use_dis_embed=True,
-        n_pref_data=10000 // 4,
-        online_finetune=True,
-        noisy_method=args.noisy_method,
-        parameter=args.parameter,
-        seed=args.seed,
-        robust_loss=args.robust_loss,
-        device=device
-    )
-
-    parameter_str = str(args.parameter).replace(".", "_")
-    archive_filename = (
-        f"logs/map_elites_{args.prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
-    )
-    # make_archive_collage(archive_filename, args.prompt)
+            parameter_str = str(args.parameter).replace(".", "_")
+            archive_filename = (
+                f"logs/map_elites_{args.prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
+            )
+            # make_archive_collage(archive_filename, args.prompt)
