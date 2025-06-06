@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import matplotlib
 import numpy as np
 import torch
+import argparse
 from alive_progress import alive_bar
 from kheperax.task import KheperaxConfig, KheperaxTask
 from qdax.core.emitters.mutation_operators import isoline_variation
@@ -113,7 +114,7 @@ def create_optimizer(
     if method == "qd":
         assert gt_bounds is not None
         objs, measures = evaluate_maze(
-            sols, method, scoring_fn, metadata, random_key=random_key
+            sols, method, scoring_fn, metadata, device, random_key=random_key
         )
         if archive_bounds is None:
             archive_bounds = gt_bounds
@@ -223,9 +224,13 @@ def run_experiment(
     n_pref_data=1000,
     online_finetune=False,
     incre_bounds=False,
+    noisy_method=None,
+    parameter=None,
+    robust_loss=None,
+    device='cpu'
 ):
     algorithm = "map_elites"
-    device = "cpu"
+    # device = "cpu"
 
     batch_size = 200
     num_evaluations = int(2e5)
@@ -266,9 +271,9 @@ def run_experiment(
         iso_sigma=iso_sigma,
         line_sigma=line_sigma,
     )
-
+    num_parameter = str(parameter * 100)
     # Create a directory for this specific trial.
-    s_logdir = os.path.join(outdir, f"{algorithm}_trial_{trial_id}")
+    s_logdir = os.path.join(outdir, f"{noisy_method}_trial{trial_id}_{num_parameter}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
         logdir.mkdir()
@@ -346,6 +351,7 @@ def run_experiment(
                         _, gt_measures, features = evaluate_maze(
                             inputs,
                             method="qd",
+                            device=device,
                             scoring_fn=scoring_fn,
                             return_features=True,
                             random_key=random_key,
@@ -358,6 +364,10 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method = noisy_method,
+                            parameter = parameter,
+                            robust_loss=robust_loss,
+                            device=device
                         )
                     else:
                         dis_embed = None
@@ -382,6 +392,7 @@ def run_experiment(
                             scoring_fn=scoring_fn,
                             return_features=True,
                             random_key=random_key,
+                            device=device
                         )
                         additional_features = additional_features.reshape(
                             n_pref_data, 3, -1
@@ -400,6 +411,10 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method = noisy_method,
+                            parameter = parameter,
+                            robust_loss=robust_loss,
+                            device = device
                         )
 
                     all_sols = list_to_batch(all_sols)
@@ -441,6 +456,7 @@ def run_experiment(
                     method="qd",
                     scoring_fn=scoring_fn,
                     random_key=random_key,
+                    device=device
                 )
                 for i in range(len(_objs)):
                     gt_archive_all.add(1, _objs[i], _gt_measures[i])
@@ -462,6 +478,7 @@ def run_experiment(
                 method="qd",
                 scoring_fn=scoring_fn,
                 random_key=random_key,
+                device=device
             )
             for i in range(len(_objs)):
                 gt_archive_all.add(1, _objs[i], _gt_measures[i])
@@ -530,6 +547,7 @@ def run_experiment(
                     method="qd",
                     scoring_fn=scoring_fn,
                     random_key=random_key,
+                    device=device
                 )
                 for i in range(len(sols)):
                     gt_archive.add(1, objs[i], gt_measures[i])
@@ -615,6 +633,11 @@ def arm_main(
     n_pref_data=1000,
     online_finetune=False,
     incre_bounds=False,
+    seed=None,
+    noisy_method=None,
+    parameter=None,
+    robust_loss=None,
+    device='cpu'
 ):
     """Experimental tool for the planar robotic arm experiments."""
 
@@ -633,36 +656,73 @@ def arm_main(
         outdir=outdir,
         log_freq=log_freq,
         log_arch_freq=log_arch_freq,
-        seed=trial_id,
+        seed=seed,
         use_dis_embed=use_dis_embed,
         n_pref_data=n_pref_data,
         online_finetune=online_finetune,
         incre_bounds=incre_bounds,
+        noisy_method=noisy_method,
+        parameter=parameter,
+        robust_loss=robust_loss,
+        device=device
     )
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        trial_id = int(sys.argv[1])
+    parser = argparse.ArgumentParser(
+        description="Run robot arm experiments")
+    parser.add_argument('--trial_id', type=int, default=0)
+    parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+    parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--robust_loss',type=str,required=True)
+    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    parser.add_argument('--cuda_index', type=int, default=0)
+
+    args = parser.parse_args()
+    
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{args.cuda_index}')
+        else:
+            print("⚠️ CUDA was requested but is not available. Falling back to CPU.")
+            device = torch.device('cpu')
     else:
-        trial_id = 0
+        device = torch.device('cpu')
 
     # QD-GT
-    arm_main(trial_id, method="qd")
+    # arm_main(trial_id, method="qd")
 
-    # AURORA
-    for method in ["pca", "ae"]:
-        for online_finetune in [True, False]:
-            arm_main(trial_id, method=method, online_finetune=online_finetune)
+    # # AURORA
+    # for method in ["pca", "ae"]:
+    #     for online_finetune in [True, False]:
+    #         arm_main(trial_id, method=method, online_finetune=online_finetune)
 
     # QDHF
     n_pref_data = 200
-    for online_finetune in [False, True]:
+    out_dir = f'logs/{args.robust_loss}_logs'
+    os.makedirs(out_dir, exist_ok=True)
+    
+    for online_finetune in [True]: # False,
         data = n_pref_data if not online_finetune else n_pref_data // 4
         arm_main(
-            trial_id,
+            trial_id=args.trial_id,
+            outdir=out_dir,
             method="qdhf",
             use_dis_embed=True,
             n_pref_data=data,
             online_finetune=online_finetune,
+            noisy_method=args.noisy_method,
+            parameter=args.parameter,
+            seed=args.seed,
+            robust_loss=args.robust_loss,
+            device=device
         )
+
+
+    if args.device == 'cuda':
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+    sys.exit(0)

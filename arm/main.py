@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
-
+import argparse
 import matplotlib
 import numpy as np
 import torch
@@ -22,10 +22,13 @@ from matplotlib import pyplot as plt
 
 sys.path.append(".")
 
+# dis_embed是对比学习的latent projector
+# 最终行为空间是二维的，可以画 heatmap
 
 def evaluate_grasp(
     joint_angles, method, metadata=None, device="cpu", return_features=False
 ):
+    # metadata传入模型用来产生measure，还有其他的附加信息
     objs = -np.var(joint_angles, axis=1)
     # Remap the objective from [-1, 0] to [0, 100]
     objs = (objs + 1.0) * 100.0
@@ -64,7 +67,7 @@ def evaluate_grasp(
         # l_1 * sin(theta_1), l_2 * sin(theta_1 + theta_2), ...
         y_pos = link_lengths[None] * np.sin(cum_theta)
 
-        if method == "qd":
+        if method == "qd":  # 相当于只保留一个二维向量乘以数量，表示“这个 grasp 抓到了哪里”
             measures = np.concatenate(
                 (
                     np.sum(x_pos, axis=1, keepdims=True),
@@ -72,7 +75,7 @@ def evaluate_grasp(
                 ),
                 axis=1,
             )
-        elif method == "gthf":
+        elif method == "gthf": # 记录了所有关节的位置
             measures = np.concatenate(
                 (
                     np.cumsum(x_pos, axis=1),
@@ -121,7 +124,7 @@ def create_optimizer(
 
     if method == "qd":
         assert gt_bounds is not None
-        objs, measures = evaluate_grasp(sols, method, metadata)
+        objs, measures = evaluate_grasp(sols, method, metadata, device)
         if archive_bounds is None:
             archive_bounds = gt_bounds
     elif method == "pca":
@@ -147,6 +150,8 @@ def create_optimizer(
     else:
         raise NotImplementedError(f"Unknown method: {method}")
 
+    # 得到measure更新archive_bounds
+    
     archive = GridArchive((50, 50), archive_bounds, seed)
     archive.initialize(solution_dim=len(sols[0]))
     # Add each solution to the archive.
@@ -208,27 +213,31 @@ def save_heatmap(archive, heatmap_path):
 def run_experiment(
     method,
     trial_id,
-    dim=1000,
-    init_pop=1000,
-    itrs=10000,
+    dim=10, 
+    init_pop=100, 
+    itrs=10000, 
     outdir="logs",
     log_freq=1,
-    log_arch_freq=1000,
+    log_arch_freq=1000, # log frequency
     seed=None,
     use_dis_embed=False,
-    n_pref_data=1000,
+    n_pref_data=1000, # number of preference data
     online_finetune=False,
     incre_bounds=False,
+    noisy_method=None,
+    parameter=None,
+    robust_loss=None,
+    device='cpu'
 ):
     algorithm = "map_elites"
-    device = "cpu"
 
     if seed is not None:
         np.random.seed(seed)
         torch.manual_seed(seed)
 
     # Create a directory for this specific trial.
-    s_logdir = os.path.join(outdir, f"{algorithm}_trial_{trial_id}")
+    num_parameter = str(100* parameter)
+    s_logdir = os.path.join(outdir, f"{noisy_method}_{num_parameter}_trial{trial_id}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
         logdir.mkdir()
@@ -255,10 +264,10 @@ def run_experiment(
             "Maximum",
             "Average",
             "QD-Score (search)",
-            "Coverage (search)",
+            "Coverage (search)", # "search" 指的是 搜索过程中的所有被探索过的解
             "Maximum (search)",
             "Average (search)",
-            "QD-Score (fit)",
+            "QD-Score (fit)", # "fit" 指的是 最终 archive 中保留下来的精英解
             "Coverage (fit)",
             "Maximum (fit)",
             "Average (fit)",
@@ -299,7 +308,7 @@ def run_experiment(
                         inputs = np.random.uniform(
                             low=-np.pi, high=np.pi, size=(n_pref_data * 3, dim)
                         )
-                        _, gt_measures = evaluate_grasp(inputs, method="qd")
+                        _, gt_measures = evaluate_grasp(inputs, method="qd", device=device) # gt_measure就是机械臂末端位置
                         dis_embed_data = inputs.reshape((n_pref_data, 3, dim))
                         dis_embed_gt_measures = gt_measures.reshape((n_pref_data, 3, 2))
                         dis_embed, dis_embed_acc = fit_dis_embed(
@@ -307,6 +316,11 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method=noisy_method,
+                            parameter=parameter,
+                            robust_loss=robust_loss,
+                            device=device,
+                            itr=itr
                         )
                     else:
                         dis_embed = None
@@ -317,7 +331,7 @@ def run_experiment(
                     #     sols = np.concatenate((sols, np.array(outliers)), axis=0)
 
                     # Update the dis embed.
-                    if use_dis_embed:
+                    if use_dis_embed: # 使用archive里新的sol训练 加噪声影响这个过程吗
                         additional_inputs = [
                             all_sols[np.random.choice(all_sols.shape[0], 3)]
                             for _ in range(n_pref_data)
@@ -325,7 +339,7 @@ def run_experiment(
                         additional_inputs = np.array(additional_inputs)
                         _, additional_gt_measures = evaluate_grasp(
                             additional_inputs.reshape(n_pref_data * 3, dim),
-                            method="qd",
+                            method="qd", device=device
                         )
                         additional_gt_measures = additional_gt_measures.reshape(
                             n_pref_data, 3, 2
@@ -341,7 +355,14 @@ def run_experiment(
                             dis_embed_gt_measures,
                             latent_dim=2,
                             seed=seed,
+                            noisy_method=noisy_method,
+                            parameter=parameter,
+                            robust_loss=robust_loss,
+                            device=device,
+                            itr=itr,
+                            all_sols=all_sols
                         )
+                        # model, acc
 
                 metadata = {"dis_embed": dis_embed}
                 _, all_features = evaluate_grasp(
@@ -359,6 +380,7 @@ def run_experiment(
                     ae = fit_ae(all_features, device=device)
                     metadata["ae"] = ae
 
+                # 如果需要更新archive，包括optimizer在内都是重新初始化
                 archive, optimizer, metadata = create_optimizer(
                     method,
                     all_sols,
@@ -369,19 +391,21 @@ def run_experiment(
                     gt_bounds=gt_archive_bounds,
                     seed=seed,
                 )
+                # Optimizer(archive,emitters,init_archive=False)
                 archive_bounds = metadata["archive_bounds"]
 
-                _objs, _gt_measures = evaluate_grasp(all_sols, method="qd")
+                _objs, _gt_measures = evaluate_grasp(all_sols, method="qd", device=device)
                 for i in range(len(all_sols)):
                     gt_archive_all.add(all_sols[i], _objs[i], _gt_measures[i])
 
-            sols = optimizer.ask()
+            # 对于普通的步骤，只需要更新solution和obj
+            sols = optimizer.ask() # 让emitters生成新的解
             objs, measures, features = evaluate_grasp(
                 sols, method, metadata, device, return_features=True
             )
             best = max(best, max(objs))
 
-            _objs, _gt_measures = evaluate_grasp(sols, method="qd")
+            _objs, _gt_measures = evaluate_grasp(sols, method="qd", device=device)
             for i in range(len(sols)):
                 gt_archive_all.add(sols[i], _objs[i], _gt_measures[i])
 
@@ -402,7 +426,7 @@ def run_experiment(
                     archive_bounds[1, 1] = np.max(measures[:, 1])
                     update_archive = True
 
-            if update_archive:
+            if update_archive: # 如果更新了bound，
                 all_sols = archive.data()[0]
                 all_sols = np.concatenate((all_sols, sols), axis=0)
                 _, all_features = evaluate_grasp(
@@ -412,6 +436,7 @@ def run_experiment(
                     device=device,
                     return_features=True,
                 )
+                # 只返回所有solution的关节坐标
                 archive, optimizer, metadata = create_optimizer(
                     method,
                     all_sols,
@@ -438,7 +463,7 @@ def run_experiment(
                 gt_archive = GridArchive((50, 50), gt_archive_bounds, seed=seed)
                 gt_archive.initialize(dim)
                 sols = archive.data()[0]
-                objs, gt_measures = evaluate_grasp(sols, method="qd")
+                objs, gt_measures = evaluate_grasp(sols, method="qd",device=device)
                 for i in range(len(sols)):
                     gt_archive.add(sols[i], objs[i], gt_measures[i])
 
@@ -510,17 +535,22 @@ def run_experiment(
 
 def arm_main(
     method,
-    trial_id=0,
+    trial_id=1,
     dim=10,
     init_pop=100,
     itrs=1000,
-    outdir="logs",
+    outdir='logs',
     log_freq=20,
     log_arch_freq=100,
     use_dis_embed=False,
     n_pref_data=1000,
     online_finetune=False,
     incre_bounds=False,
+    noisy_method=None,
+    parameter=None,
+    seed=None,
+    robust_loss=None,
+    device='cpu'
 ):
     """Experimental tool for the planar robotic arm experiments."""
 
@@ -539,49 +569,91 @@ def arm_main(
         outdir=outdir,
         log_freq=log_freq,
         log_arch_freq=log_arch_freq,
-        seed=trial_id,
+        seed=seed,
         use_dis_embed=use_dis_embed,
         n_pref_data=n_pref_data,
         online_finetune=online_finetune,
         incre_bounds=incre_bounds,
+        noisy_method=noisy_method,
+        parameter=parameter,
+        robust_loss=robust_loss,
+        device=device
     )
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        trial_id = int(sys.argv[1])
-    else:
-        trial_id = 0
+    # if len(sys.argv) > 1:
+    #     trial_id = int(sys.argv[1])
+    # else:
+    #     trial_id = 0
 
+    parser = argparse.ArgumentParser(
+        description="Run robot arm experiments")
+    parser.add_argument('--trial_id', type=int, default=0)
+    parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+    parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--robust_loss',type=str,required=True)
+    parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    parser.add_argument('--cuda_index', type=int, default=0)
+
+    args = parser.parse_args()
     # QD-GT
-    arm_main(method="qd", trial_id=trial_id)
+    #  arm_main(method="qd", trial_id=trial_id)
 
     # AURORA
-    for online_finetune in [False, True]:
-        arm_main(
-            method="pca",
-            trial_id=trial_id,
-            online_finetune=online_finetune,
-        )
-        arm_main(
-            method="ae",
-            trial_id=trial_id,
-            online_finetune=online_finetune,
-        )
+    # for online_finetune in [False, True]:
+    #    arm_main(
+    #        method="pca",
+    #        trial_id=trial_id,
+    #        online_finetune=online_finetune,
+    #    )
+    #    arm_main(
+    #        method="ae",
+    #        trial_id=trial_id,
+    #        online_finetune=online_finetune,
+    #    )
+
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{args.cuda_index}')
+        else:
+            print("⚠️ CUDA was requested but is not available. Falling back to CPU.")
+            device = torch.device('cpu')
+    else:
+        device = torch.device('cpu')
 
     # QDHF
     n_pref_data = 1000
+    out_dir = f'logs/{args.robust_loss}_logs'
+    os.makedirs(out_dir, exist_ok=True)
+    # arm_main(
+    #     method="qdhf",
+    #     trial_id=args.trial_id,
+    #     use_dis_embed=True,
+    #     n_pref_data=n_pref_data,
+    #     online_finetune=False,
+    #     noisy_method=args.noisy_method,
+    #     parameter=args.parameter,
+    #     seed=args.seed
+    # )
     arm_main(
         method="qdhf",
-        trial_id=trial_id,
-        use_dis_embed=True,
-        n_pref_data=n_pref_data,
-        online_finetune=False,
-    )
-    arm_main(
-        method="qdhf",
-        trial_id=trial_id,
+        trial_id=args.trial_id,
+        outdir=out_dir,
         use_dis_embed=True,
         n_pref_data=n_pref_data // 4,
         online_finetune=True,
+        noisy_method=args.noisy_method,
+        parameter=args.parameter,
+        seed=args.seed,
+        robust_loss=args.robust_loss,
+        device=device
     )
+    
+    if args.device == 'cuda':
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+    sys.exit(0)

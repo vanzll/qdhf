@@ -26,3 +26,5 @@ __all__ = [
     "ArchiveBase",
     "AddStatus",
 ]
+
+# 从外部调用 from ribs.archives import * 会只导入上述五个类。

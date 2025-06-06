@@ -43,7 +43,8 @@ class RandomBuffer:
 
         self._rng = np.random.default_rng(seed)
         self._buf_size = buf_size
-        self._buffer = self._rng.random(buf_size)
+        self._buffer = self._rng.random(buf_size) 
+        # 一次性生成 buf_size 个 [0, 1) 区间内的随机浮点数，存入 self._buffer
         self._buf_idx = 0
 
     def get(self, max_val):
@@ -55,6 +56,7 @@ class RandomBuffer:
         if self._buf_idx >= self._buf_size:
             self._buf_idx = 0
             self._buffer = self._rng.random(self._buf_size)
+            # 刷新整个 buffer
 
         return val
 
@@ -71,6 +73,8 @@ class ArchiveBase(ABC):  # pylint: disable = too-many-instance-attributes
     common dimensions. Using the ``storage_dims`` and ``behavior_dim`` arguments
     in :meth:`__init__` and the ``solution_dim`` argument in ``initialize``,
     these arrays are as follows:
+    
+    是否被占用 解本身 目标值 行为值 元数据
 
     +------------------------+------------------------------------+
     | Name                   |  Shape                             |
@@ -164,10 +168,10 @@ class ArchiveBase(ABC):  # pylint: disable = too-many-instance-attributes
         # docstring).
         self._rand_buf = None
         self._seed = seed
-        self._initialized = False
+        self._initialized = False # 是否初始化
         self._bins = np.product(self._storage_dims)
 
-        self._dtype = self._parse_dtype(dtype)
+        self._dtype = self._parse_dtype(dtype) # 定义浮点数精度
 
     @staticmethod
     def _parse_dtype(dtype):

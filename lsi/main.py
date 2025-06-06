@@ -6,7 +6,12 @@ import os
 import sys
 import time
 from pathlib import Path
+import subprocess
+import pandas as pd
+import numpy as np
+import re
 
+import argparse
 import clip
 import matplotlib
 import numpy as np
@@ -57,7 +62,7 @@ def evaluate_lsi(
     device="cpu",
     return_features=False,
     clip_features=None,
-    dreamsim_features=None,
+    dreamsim_features=None, # human preference model
     objs=None,
 ):
     # print(latents.shape)  # torch.Size([10, 4, 64, 64])
@@ -258,15 +263,21 @@ def run_experiment(
     n_pref_data=100,
     online_finetune=False,
     incre_bounds=False,
+    noisy_method=None,
+    parameter=None,
+    robust_loss=None,
+    device='cpu'
 ):
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "false"
     algorithm = "map_elites"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
 
     np.random.seed(seed)
-    torch.manual_seed(seed)
+    torch.manual_seed(seed) # 
+    parameter_str = str(parameter).replace(".", "_")
 
     # Create a directory for this specific trial.
-    s_logdir = os.path.join(outdir, f"{algorithm}_{prompt}")
+    s_logdir = os.path.join(outdir, f"{noisy_method}_{parameter_str}_{seed}")
     logdir = Path(s_logdir)
     if not logdir.is_dir():
         logdir.mkdir()
@@ -394,6 +405,9 @@ def run_experiment(
                             latent_dim=2,
                             seed=seed,
                             device=device,
+                            noisy_method=noisy_method,
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
                     else:
                         dis_embed = None
@@ -446,6 +460,9 @@ def run_experiment(
                             latent_dim=2,
                             seed=seed,
                             device=device,
+                            noisy_method=noisy_method,
+                            parameter=parameter,
+                            robust_loss=robust_loss
                         )
 
                 metadata["dis_embed"] = dis_embed
@@ -526,28 +543,112 @@ def run_experiment(
 
     print(log_file_name, "| QD score:", data[1], "Coverage:", data[2])
     print()
+    
+    csv_path = f"logs/{method}_{noisy_method}_experiment_results.csv"
+    header_written = not os.path.exists(csv_path)
+    record = {
+        "Method": method,
+        "Parameter": parameter,
+        "Seed": seed,
+        "QD Score": qd_score,
+        "Coverage": coverage
+    }
+    pd.DataFrame([record]).to_csv(csv_path, mode='a', header=header_written, index=False)
+    
+    if seed == 4444:
+        df = pd.read_csv(csv_path)
+        last_four_rows = df.tail(4)
+
+        qd_scores = last_four_rows['QD Score'].values
+        coverage_scores = last_four_rows['Coverage'].values
+
+        qd_mean = np.nanmean(qd_scores)
+        qd_std = np.nanstd(qd_scores)
+        coverage_mean = np.nanmean(coverage_scores)
+        coverage_std = np.nanstd(coverage_scores)
+        stats_record = {
+            "Method": method,
+            "Parameter": parameter,
+            "Seed": "Mean",
+            "QD Score": qd_mean,
+            "Coverage": coverage_mean
+        }
+        pd.DataFrame([stats_record]).to_csv(csv_path, mode='a', header=False, index=False)
+
+        stats_record = {
+            "Method": method,
+            "Parameter": parameter,
+            "Seed": "STD",
+            "QD Score": qd_std,
+            "Coverage": coverage_std
+        }
+        pd.DataFrame([stats_record]).to_csv(csv_path, mode='a', header=False, index=False)
+
+        print(f"Experiment results for seed {seed} have been saved to {csv_path}")
+
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        prompt = sys.argv[1]
+    parser = argparse.ArgumentParser(
+        description="Run robot arm experiments")
+    # parser.add_argument('--trial_id', type=int, default=0)
+    parser.add_argument('--prompt', type=str, default='a photo of an astronaut riding a horse on mars')
+    parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+    parser.add_argument('--parameter', type=float, required=True)
+    parser.add_argument('--robust_loss',type=str,required=True)
+    parser.add_argument('--seed', type=int, required=False)
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cpu')
+    parser.add_argument('--cuda_index', type=int, default=0)
+
+    args = parser.parse_args()
+    
+    if args.device == 'cuda':
+        if torch.cuda.is_available():
+            device = torch.device(f'cuda:{args.cuda_index}')
+        else:
+            print("⚠️ CUDA was requested but is not available. Falling back to CPU.")
+            device = torch.device('cpu')
     else:
-        prompt = "a photo of an astronaut riding a horse on mars"
+        device = torch.device('cpu')
 
     # Create a shared logging directory for the experiments for this algorithm.
-    outdir = Path("logs")
-    if not outdir.is_dir():
-        outdir.mkdir()
+        
+    out_dir = f'logs/{args.robust_loss}_logs'
+    os.makedirs(out_dir, exist_ok=True)
+    
+    seeds = [1111, 2222, 3333, 4444]
+    noisy_list = {
+        "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], # 0.05, 0.1, 0.2, 
+        "stochastic": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
+        "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
+        "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]}
+    
+    
+    noisy_method = args.noisy_method
+    noisy_rates = noisy_list[noisy_method]
+    
+    for noisy_rate in noisy_rates:
+        for seed in seeds:
+            print(f"Running experiment with seed {seed}")
+            run_experiment(
+                "qdhf",
+                args.prompt,
+                outdir=out_dir,
+                itrs=1000,        
+                use_dis_embed=True,
+                n_pref_data=10000 // 4,
+                online_finetune=True,
+                noisy_method=noisy_method,
+                parameter=noisy_rate,
+                seed=seed,
+                robust_loss=args.robust_loss,
+                device=device
+            )
 
-    run_experiment(
-        "qdhf",
-        prompt,
-        use_dis_embed=True,
-        n_pref_data=10000 // 4,
-        online_finetune=True,
-    )
-
-    archive_filename = (
-        f"logs/map_elites_{prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
-    )
-    make_archive_collage(archive_filename, prompt)
+        parameter_str = str(args.parameter).replace(".", "_")
+        archive_filename = (
+            f"logs/map_elites_{args.prompt}/qdhf(n=10000)|online|fixed_archive_00000200.pkl"
+        )
+        # make_archive_collage(archive_filename, args.prompt)

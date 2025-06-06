@@ -27,3 +27,13 @@ venv.bak/
 
 # Local outputs
 logs/
+lsi/models/
+robust_logs/
+reweight_logs/
+truncated_logs/
+label_smoothing_logs/
+
+*.pth
+*.zip
+
+RIME/

@@ -4,7 +4,8 @@ import numpy as np
 import torch
 from sklearn.decomposition import PCA
 from torch import nn
-
+from generate_noise import NoiseGenerator
+from robust_loss import RobustLossAgent, TripletCDRP, InstanceEarlyStopper
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -32,7 +33,7 @@ class DisEmbed(nn.Module):
 
 
 def fit_dis_embed(
-    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu"
+    inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", noisy_method=None, parameter=None, robust_loss=None
 ):
     t = time.time()
     model = DisEmbed(input_dim=inputs.shape[-1], latent_dim=latent_dim)
@@ -70,24 +71,93 @@ def fit_dis_embed(
 
     val_acc = []
     for epoch in range(1000):
-        for _ in range(n_iters_per_epoch):
-            idx = np.random.choice(n_train, batch_size)
-            batch_ref = ref_train[idx].float()
-            batch1 = x1_train[idx].float()
-            batch2 = x2_train[idx].float()
+        if epoch < 100:
+            early_stopper = InstanceEarlyStopper(num_samples=n_train, patience=3, delta=1e-1)
+        else:
+            early_stopper = InstanceEarlyStopper(num_samples=n_train, patience=3, delta=5e-2)
+        if robust_loss == 'ies':
+            full_idx = np.arange(n_train)
+            active_idx = early_stopper.get_active_indices(full_idx)
+
+            if len(active_idx) <= batch_size:
+                print("All triplets stopped early.")
+                break
+
+            batch_idx = np.random.choice(active_idx, batch_size)
+
+            batch_ref = torch.tensor(ref_train[batch_idx], dtype=torch.float32).to(device)
+            batch1 = torch.tensor(x1_train[batch_idx], dtype=torch.float32).to(device)
+            batch2 = torch.tensor(x2_train[batch_idx], dtype=torch.float32).to(device)
+
+            ref_embed = model.forward(batch_ref)
+            x1_embed = model.forward(batch1)
+            x2_embed = model.forward(batch2)
+
+            gt_dis = np.sum(
+                np.square(ref_gt_train[batch_idx].cpu().numpy() - x1_gt_train[batch_idx].cpu().numpy()) -
+                np.square(ref_gt_train[batch_idx].cpu().numpy() - x2_gt_train[batch_idx].cpu().numpy()),
+                axis=-1
+            )
+            gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1
+            noise_gen = NoiseGenerator()
+            gt_noise = noise_gen.generate_noise(gt, gt_dis, noisy_method=noisy_method, parameter=parameter).to(device)
+
+            delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
+            loss_samplewise = torch.clamp(0.05 - gt_noise * delta_dis, min=0.0)  # shape: (B,)
+            
+            # if epoch <= 3:
+            #     print(f"Mean: {loss_samplewise.mean().item()}")
+            #     print(f"Standard Deviation: {loss_samplewise.std().item()}")
+            #     print(f"Max: {loss_samplewise.max().item()}")
+            #     print(f"Min: {loss_samplewise.min().item()}")
+
+            loss = loss_samplewise.mean()
 
             optimizer.zero_grad()
-            delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
-            gt_dis = torch.nn.functional.cosine_similarity(
-                ref_gt_train[idx], x2_gt_train[idx], dim=-1
-            ) - torch.nn.functional.cosine_similarity(
-                ref_gt_train[idx], x1_gt_train[idx], dim=-1
-            )
-            gt = (gt_dis > 0).float() * 2 - 1
-
-            loss = loss_fn(gt, delta_dis)
             loss.backward()
             optimizer.step()
+
+            # 更新 IES 模块
+            early_stopper.update(batch_idx, loss_samplewise.detach().cpu())
+        else:
+            for _ in range(n_iters_per_epoch):
+                idx = np.random.choice(n_train, batch_size)
+                batch_ref = torch.tensor(ref_train[idx], dtype=torch.float32).to(device)
+                batch1 = torch.tensor(x1_train[idx], dtype=torch.float32).to(device)
+                batch2 = torch.tensor(x2_train[idx], dtype=torch.float32).to(device)
+
+                optimizer.zero_grad()
+                
+                gt_dis = np.sum(
+                    (
+                        np.square(ref_gt_train[idx].cpu().numpy() - x1_gt_train[idx].cpu().numpy())
+                        - np.square(ref_gt_train[idx].cpu().numpy() - x2_gt_train[idx].cpu().numpy())
+                    ),
+                    -1,
+                )
+                # print("abs(gt_dis) percentiles:",np.percentile(np.abs(gt_dis), [0, 5, 10, 20, 30, 50, 60, 70, 90, 100]))
+                noise_gen = NoiseGenerator()
+                gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1 # 产生无噪声标签
+                gt_noise = noise_gen.generate_noise(
+                    gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
+                
+                # loss = loss_fn(gt_noise, delta_dis)
+                
+                # 使用 Reweighted loss
+                if robust_loss == 'crdo':
+                    ref_embed = model.forward(batch_ref).to(device)
+                    x1_embed  = model.forward(batch1).to(device)
+                    x2_embed  = model.forward(batch2).to(device)
+                    triplet_loss_fn = TripletCDRP(gamma=5.0, eta=0.5, eps=0.01).to(device)
+                    loss = triplet_loss_fn(ref_embed, x1_embed, x2_embed, gt_noise).to(device)
+                else:
+                    loss_agent = RobustLossAgent(margin=0.05)
+                    delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
+                    delta_dis = delta_dis.to(device)
+                    gt_noise = gt_noise.to(device)
+                    loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, parameter, epoch, device)
+                loss.backward()
+                optimizer.step()
 
         # Evaluate.
         n_correct = 0
