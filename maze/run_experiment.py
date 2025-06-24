@@ -16,11 +16,11 @@ args = parser.parse_args()
 
 # 实验设置
 noisy_list = {
-    "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], # 0.05, 0.1, 0.2, 
-    "stochastic": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    "noisy_labels_exact": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], # 0.05, 0.1, 0.2, 0.3, 0.4, 
+    "stochastic": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
     "add_equal_noise": [1, 2, 5, 10, 15, 20, 25, 30],
     "flip_by_distance": [1, 2, 5, 10, 15, 20, 25, 30],
-    "flip_labels_asymmetric": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    "flip_labels_asymmetric": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 }
 noisy_methods = {args.noise_type: noisy_list[args.noise_type]}
 base_trial_ids = {
@@ -34,7 +34,7 @@ seeds = ["1111", "2222", "3333", "4444"]
 
 # 主逻辑
 for method, params in noisy_methods.items():
-    csv_path = f"/mnt/data6t/qdhf/lsi/logs/{args.robust}_logs/{method}_experiment_results.csv"
+    csv_path = f"/mnt/data6t/qdhf/maze/logs/{args.robust}_logs/{method}_experiment_results.csv"
 
     # 检查文件是否存在，如果存在则跳过创建
     if os.path.exists(csv_path):

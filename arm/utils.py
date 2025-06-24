@@ -5,8 +5,101 @@ from torch import nn
 import numpy as np
 import time
 from generate_noise import NoiseGenerator
-from robust_loss import RobustLossAgent, TripletCDRP, InstanceEarlyStopper
+from robust_loss import RobustLossAgent, TripletCDRP, InstanceEarlyStopper, NaPOLoss
 from evaluate import replace_sample
+import matplotlib.pyplot as plt
+import os
+
+def plot_multiple_curves(
+    lists,          # list of lists，eg: [list1, list2, list3]
+    labels,         # list of str，自定义每条线的名字
+    save_path,      # str，保存路径
+    title="Noise Rate over Epochs",
+    xlabel="Epoch",
+    ylabel="Noise Rate"
+):
+
+    plt.figure(figsize=(8,6))
+
+    num_lists = len(lists)
+    colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']  # 够多线就循环用
+
+    epochs = list(range(1, len(lists[0]) + 1))
+
+    for i in range(num_lists):
+        plt.plot(
+            epochs,
+            lists[i],
+            label=labels[i],
+            color=colors[i % len(colors)],
+            marker='o'
+        )
+
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.grid(True)
+    plt.legend()
+    
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)  # 自动创建目录
+    plt.savefig(save_path)
+    plt.close()
+    print(f"compete: {save_path}")
+    
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+
+def plot_signed_delta_with_noise_breakdown(
+    signed_deltas: list,
+    is_clean_flags: list,      # list of 0 (noise) or 1 (clean)
+    save_path: str,
+    bins: int = 100
+):
+
+    # 把数据转换成 numpy
+    signed_deltas = np.array(signed_deltas)
+    is_clean_flags = np.array(is_clean_flags)
+
+    # 分 bin
+    bin_counts_total, bin_edges = np.histogram(signed_deltas, bins=bins)
+    bin_width = bin_edges[1] - bin_edges[0]
+
+    # 初始化 clean/noise bin counts
+    bin_counts_clean = np.zeros_like(bin_counts_total)
+    bin_counts_noise = np.zeros_like(bin_counts_total)
+
+    # 分 bin 累加 clean / noise 数
+    for i in range(len(signed_deltas)):
+        val = signed_deltas[i]
+        is_clean = is_clean_flags[i]
+
+        # 找到这个样本落在哪个 bin
+        bin_idx = np.searchsorted(bin_edges, val, side='right') - 1
+        if 0 <= bin_idx < bins:
+            if is_clean:
+                bin_counts_clean[bin_idx] += 1
+            else:
+                bin_counts_noise[bin_idx] += 1
+
+    # 绘图
+    x = bin_edges[:-1]  # 每个 bin 的起点
+    plt.figure(figsize=(10,6))
+    plt.bar(x, bin_counts_clean, width=bin_width, color='skyblue', label='Clean', align='edge')
+    plt.bar(x, bin_counts_noise, width=bin_width, bottom=bin_counts_clean, color='salmon', label='Noisy', align='edge')
+
+    plt.xlabel("Signed Delta (y × Δ)")
+    plt.ylabel("Sample Count")
+    plt.title("Distribution of Signed Delta with Noise Breakdown")
+    plt.legend()
+    plt.grid(True)
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"✅ 图已保存到: {save_path}")
+
 
 class DisEmbed(nn.Module):
     def __init__(self, input_dim, latent_dim):
@@ -42,14 +135,14 @@ class DisEmbed(nn.Module):
 
 def fit_dis_embed(
     inputs, gt_measures, latent_dim, batch_size=32, seed=None, device="cpu", 
-    noisy_method=None, parameter=None, robust_loss=None, itr=1, all_sols=None
+    noisy_method=None, parameter=None, robust_loss=None, itr=1, all_sols=None, log_dir=None
 ):
     # 这个函数使用 triplet-based contrastive learning，训练一个模型在嵌入空间中表示“人类感知下的多样性”
     # inputs是随机产生的角度
     # print(device)
     # print(inputs.shape) (250, 3, 10)
     # print(gt_measures.shape) (250, 3, 2)
-    itr = (itr-1)/500
+    itr = (itr-1)/100
     t = time.time()
     model = DisEmbed(input_dim=inputs.shape[-1], latent_dim=latent_dim)
     model.to(device)
@@ -97,32 +190,23 @@ def fit_dis_embed(
         gt_all, gt_dis_all, noisy_method=noisy_method, parameter=parameter
     )
     val_acc = []
+    origin_list, flip_list, resample_list = [],[],[]
+    all_signed_deltas, is_clean_flags = [], []
     for epoch in range(1000):
+        origin_noise = 0.0
+        flip_noise = 0.0
+        resample_noise = 0.0
         for _ in range(n_iters_per_epoch):
             idx = np.random.choice(n_train, batch_size)
+            idx_torch = torch.tensor(idx, dtype=torch.long) 
             batch_ref = torch.tensor(ref_train[idx], dtype=torch.float32).to(device)
             batch1 = torch.tensor(x1_train[idx], dtype=torch.float32).to(device)
             batch2 = torch.tensor(x2_train[idx], dtype=torch.float32).to(device)
             batch_gt_noise = gt_noise_all[idx].to(device) # .clone().detach()
+            batch_gt = gt_all[idx].to(device)
+            origin_noise += (batch_gt == batch_gt_noise).sum().item()
+            # print(origin_noise)
 
-            # optimizer.zero_grad()
-                
-            # gt_dis = np.sum(
-            #         (
-            #             np.square(ref_gt_train[idx] - x1_gt_train[idx])
-            #             - np.square(ref_gt_train[idx] - x2_gt_train[idx])
-            #         ),
-            #         -1,
-            #     )
-                # print("abs(gt_dis) percentiles:",np.percentile(np.abs(gt_dis), [0, 5, 10, 20, 30, 50, 60, 70, 90, 100]))
-            # noise_gen = NoiseGenerator()
-            # gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1 # 产生无噪声标签
-            # gt_noise = noise_gen.generate_noise(
-            #     gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
-                
-                # loss = loss_fn(gt_noise, delta_dis)
-                
-                # 使用 Reweighted loss
             if robust_loss == 'crdo':
                 optimizer.zero_grad()
                 ref_embed = model.forward(batch_ref).to(device)
@@ -130,25 +214,25 @@ def fit_dis_embed(
                 x2_embed  = model.forward(batch2).to(device)
                 triplet_loss_fn = TripletCDRP(gamma=5.0, eta=0.5, eps=0.01).to(device)
                 loss = triplet_loss_fn(ref_embed, x1_embed, x2_embed, batch_gt_noise).to(device)
-            if robust_loss == 'robust_qdhf':
-                # model.eval() 
+            elif robust_loss == 'robust_qdhf':
                 delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2).detach()
                 signed_delta = delta_dis * batch_gt_noise
+                all_signed_deltas.extend(signed_delta.detach().cpu().tolist())
+                is_clean_flags.extend((batch_gt == batch_gt_noise).cpu().tolist())
                 neg_mask = signed_delta < 0
                 signed_delta_neg = signed_delta[neg_mask]
                 if signed_delta_neg.numel() > 0:
                     mean_neg = signed_delta_neg.mean()
                     std_neg = signed_delta_neg.std()
-                    threshold1 = mean_neg - 3 * std_neg
-                    threshold2 = mean_neg - 1 * std_neg
+                    threshold1 = mean_neg - 2 * std_neg
+                    threshold2 = mean_neg - 0 * std_neg
                     flip_mask = signed_delta <= threshold1
                     replace_mask = (signed_delta > threshold1) & (signed_delta < threshold2)
-                    keep_mask = signed_delta >= threshold2
-                    batch_gt_noise = batch_gt_noise.detach()
+                    # keep_mask = signed_delta >= threshold2
                     batch_gt_noise[flip_mask] = -batch_gt_noise[flip_mask]
+                    flip_noise += (batch_gt == batch_gt_noise).sum().item()
                     for i in torch.where(replace_mask)[0]:
-                        # with torch.no_grad():
-                        batch1[i], batch2[i], batch_gt_noise[i] = replace_sample(
+                        batch1[i], batch2[i], batch_gt_noise[i], batch_gt[i] = replace_sample(
                                 batch_ref[i], batch1[i], batch2[i],
                                 model=model,
                                 device=device,
@@ -158,16 +242,22 @@ def fit_dis_embed(
                                 all_sols=all_sols,
                                 itr=itr
                             )
-                            # batch1[i] = b1.detach()
-                            # batch2[i] = b2.detach()
-                            # batch_gt_noise[i] = new_lbl.detach()
+                # x1_train[idx_torch] = batch1.detach().cpu()
+                # x2_train[idx_torch] = batch2.detach().cpu()
+                # gt_noise_all[idx_torch] = batch_gt_noise.detach().cpu()
+                # gt_all[idx_torch] = batch_gt.detach().cpu()
+
+                resample_noise += (batch_gt == batch_gt_noise).sum().item()
+                # print(f"after resample: {count_same.item()}")
                 optimizer.zero_grad()
-                # model.train()
                 delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
                 loss_agent = RobustLossAgent(margin=0.05)
                 loss = loss_agent.robust_loss(delta_dis, batch_gt_noise, robust_loss, parameter, epoch, device).to(device)
-                # loss.backward()
-                # optimizer.step()
+            elif robust_loss == "NaPO":
+                optimizer.zero_grad()
+                loss_fn = NaPOLoss(alpha=0.05)
+                delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
+                loss = loss_fn(delta_dis, batch_gt_noise)
             else:
                 optimizer.zero_grad()
                 loss_agent = RobustLossAgent(margin=0.05)
@@ -175,97 +265,15 @@ def fit_dis_embed(
                 loss = loss_agent.robust_loss(delta_dis, batch_gt_noise, robust_loss, parameter, epoch, device).to(device)
             loss.backward()
             optimizer.step()
-    # for epoch in range(1000):
-    #     if epoch < 100:
-    #         early_stopper = InstanceEarlyStopper(num_samples=n_train, patience=5, delta=1e-1)
-    #     else:
-    #         early_stopper = InstanceEarlyStopper(num_samples=n_train, patience=5, delta=3e-2)
-    #     if robust_loss == 'ies':
-    #         full_idx = np.arange(n_train)
-    #         active_idx = early_stopper.get_active_indices(full_idx)
-            
-    #         if epoch % 100 == 0:
-    #             print(len(active_idx))
+        if robust_loss == 'robust_qdhf':
+            total_sample = batch_size * n_iters_per_epoch
+            origin_list.append(1 - origin_noise / total_sample)  # float / int → float，OK
+            flip_list.append(1-flip_noise/total_sample)
+            resample_list.append(1-resample_noise/total_sample)
+            # all_losses.extend(loss.detach().cpu().tolist())
 
-    #         if len(active_idx) <= batch_size:
-    #             print("All triplets stopped early.")
-    #             break
 
-    #         batch_idx = np.random.choice(active_idx, batch_size)
 
-    #         batch_ref = torch.tensor(ref_train[batch_idx], dtype=torch.float32).to(device)
-    #         batch1 = torch.tensor(x1_train[batch_idx], dtype=torch.float32).to(device)
-    #         batch2 = torch.tensor(x2_train[batch_idx], dtype=torch.float32).to(device)
-
-    #         ref_embed = model.forward(batch_ref)
-    #         x1_embed = model.forward(batch1)
-    #         x2_embed = model.forward(batch2)
-
-    #         gt_dis = np.sum(
-    #             np.square(ref_gt_train[batch_idx] - x1_gt_train[batch_idx]) -
-    #             np.square(ref_gt_train[batch_idx] - x2_gt_train[batch_idx]),
-    #             axis=-1
-    #         )
-    #         gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1
-    #         noise_gen = NoiseGenerator()
-    #         gt_noise = noise_gen.generate_noise(gt, gt_dis, noisy_method=noisy_method, parameter=parameter).to(device)
-
-    #         delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
-    #         loss_samplewise = torch.clamp(0.05 - gt_noise * delta_dis, min=0.0)  # shape: (B,)
-            
-    #         # if epoch <= 3:
-    #         #     print(f"Mean: {loss_samplewise.mean().item()}")
-    #         #     print(f"Standard Deviation: {loss_samplewise.std().item()}")
-    #         #     print(f"Max: {loss_samplewise.max().item()}")
-    #         #     print(f"Min: {loss_samplewise.min().item()}")
-
-    #         loss = loss_samplewise.mean()
-
-    #         optimizer.zero_grad()
-    #         loss.backward()
-    #         optimizer.step()
-
-    #         # 更新 IES 模块
-    #         early_stopper.update(batch_idx, loss_samplewise.detach().cpu())
-    #     else:
-    #         for _ in range(n_iters_per_epoch):
-    #             idx = np.random.choice(n_train, batch_size)
-    #             batch_ref = torch.tensor(ref_train[idx], dtype=torch.float32).to(device)
-    #             batch1 = torch.tensor(x1_train[idx], dtype=torch.float32).to(device)
-    #             batch2 = torch.tensor(x2_train[idx], dtype=torch.float32).to(device)
-
-    #             optimizer.zero_grad()
-                
-    #             gt_dis = np.sum(
-    #                 (
-    #                     np.square(ref_gt_train[idx] - x1_gt_train[idx])
-    #                     - np.square(ref_gt_train[idx] - x2_gt_train[idx])
-    #                 ),
-    #                 -1,
-    #             )
-    #             # print("abs(gt_dis) percentiles:",np.percentile(np.abs(gt_dis), [0, 5, 10, 20, 30, 50, 60, 70, 90, 100]))
-    #             noise_gen = NoiseGenerator()
-    #             gt = torch.tensor(gt_dis > 0, dtype=torch.float32) * 2 - 1 # 产生无噪声标签
-    #             gt_noise = noise_gen.generate_noise(
-    #                 gt, gt_dis, noisy_method=noisy_method, parameter=parameter)
-                
-    #             # loss = loss_fn(gt_noise, delta_dis)
-                
-    #             # 使用 Reweighted loss
-    #             if robust_loss == 'crdo':
-    #                 ref_embed = model.forward(batch_ref).to(device)
-    #                 x1_embed  = model.forward(batch1).to(device)
-    #                 x2_embed  = model.forward(batch2).to(device)
-    #                 triplet_loss_fn = TripletCDRP(gamma=5.0, eta=0.5, eps=0.01).to(device)
-    #                 loss = triplet_loss_fn(ref_embed, x1_embed, x2_embed, gt_noise).to(device)
-    #             else:
-    #                 loss_agent = RobustLossAgent(margin=0.05)
-    #                 delta_dis = model.triplet_delta_dis(batch_ref, batch1, batch2)
-    #                 loss = loss_agent.robust_loss(delta_dis, gt_noise, robust_loss, parameter, epoch, device).to(device)
-    #             loss.backward()
-    #             optimizer.step()
-
-        # Evaluate.
         n_correct = 0
         n_total = 0
         with torch.no_grad():
@@ -291,6 +299,18 @@ def fit_dis_embed(
 
         if epoch > 10 and np.mean(val_acc[-10:]) < np.mean(val_acc[-11:-1]):
             break
+        
+    if robust_loss == "robust_qdhf":
+        plot_multiple_curves(
+            lists=[origin_list, flip_list, resample_list],
+            labels=["Origin Noise Rate", "Flip Rate", "Resample Rate"],
+            save_path=os.path.join(log_dir, f"noise_rate{itr}.png")
+        )
+        plot_signed_delta_with_noise_breakdown(
+            signed_deltas=all_signed_deltas,
+            is_clean_flags=is_clean_flags,
+            save_path=os.path.join(log_dir, f"signed_delta_noise_breakdown{itr}.png")
+        )
 
     print(
         f"{np.round(time.time()- t, 1)}s ({epoch} epochs) | DisEmbed (n={n_pref_data}) fitted with val acc.: {acc}"

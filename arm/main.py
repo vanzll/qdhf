@@ -320,7 +320,8 @@ def run_experiment(
                             parameter=parameter,
                             robust_loss=robust_loss,
                             device=device,
-                            itr=itr
+                            itr=itr,
+                            log_dir=s_logdir
                         )
                     else:
                         dis_embed = None
@@ -360,7 +361,8 @@ def run_experiment(
                             robust_loss=robust_loss,
                             device=device,
                             itr=itr,
-                            all_sols=all_sols
+                            all_sols=all_sols,
+                            log_dir=s_logdir
                         )
                         # model, acc
 
@@ -591,7 +593,7 @@ if __name__ == "__main__":
         description="Run robot arm experiments")
     parser.add_argument('--trial_id', type=int, default=0)
     parser.add_argument('--noisy_method', type=str, choices=['stochastic', 'add_equal_noise',
-                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact'], required=True)
+                        'flip_by_distance', 'flip_labels_asymmetric', 'noisy_labels_exact', 'None'], required=True)
     parser.add_argument('--parameter', type=float, required=True)
     parser.add_argument('--robust_loss',type=str,required=True)
     parser.add_argument('--seed', type=int, required=True)

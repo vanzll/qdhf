@@ -30,7 +30,8 @@ class RobustLossAgent:
             return self.cDPO_triplet_loss(delta_dis, y, epsilon=epsilon)
         
         elif robust_loss == 'None':
-            loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0]), 0.05 - y * delta_dis).mean()
+            # loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0]), 0.05 - y * delta_dis).mean()
+            loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0], device=y.device), 0.05 - y * delta_dis).mean()
             return loss_fn(y, delta_dis)
 
         else:

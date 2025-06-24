@@ -45,9 +45,14 @@ def evaluate_maze(
         metadata = {}
 
     fitnesses, descriptors, extra_scores, random_key = scoring_fn(inputs, random_key)
+    # fitnesses：表现得好不好（高分=好）。
+    # descriptors：agent在迷宫最终的位置、轨迹等描述性的diversity特征。
+    # extra_scores：额外记录的状态序列，比如整个行走过程的轨迹（每步坐标）。
+    # 跑仿真环境
     fitnesses = (fitnesses + 0.3) / 0.3 * 100
 
-    features = extra_scores["transitions"].state_desc  # batch, 250, 2
+    features = extra_scores["transitions"].state_desc  # batch, 250, 2 仿真走250 step
+    # 每一步(x,y)
     features = features.reshape(features.shape[0], 500)  # batch, 500
 
     if "dis_embed" in metadata:
@@ -171,7 +176,8 @@ def emit(archive, variation_fn, random_key):
         lambda x: jax.random.choice(subkey, x, shape=(batch_size,)),
         pool,
     )
-    population, random_key = variation_fn(x1, x2, random_key)
+    # 两个随机样本
+    population, random_key = variation_fn(x1, x2, random_key) # 变异生成新样本
     return population, random_key
 
 
@@ -236,24 +242,25 @@ def run_experiment(
     num_evaluations = int(2e5)
     num_iterations = num_evaluations // batch_size
 
-    if seed is None:
-        seed = 42
+    # if seed is None:
+    #     seed = 42
 
     # Init a random key
     np.random.seed(seed)
     torch.manual_seed(seed)
     random_key = jax.random.PRNGKey(seed)
-    random_key, subkey = jax.random.split(random_key)
+    random_key, subkey = jax.random.split(random_key) # 拿一个 subkey 给环境初始化
 
     # Define Task configuration
-    config_kheperax = KheperaxConfig.get_default()
+    config_kheperax = KheperaxConfig.get_default() 
+    # 是一个仿真小机器人（有轮子、有激光传感器）在迷宫中导航，属于一个 Quality Diversity benchmark
 
     # Example of modification of the robots attributes (same thing could be done with the maze)
     config_kheperax.robot = config_kheperax.robot.replace(
         lasers_return_minus_one_if_out_of_range=True
     )
 
-    # Create Kheperax Task.
+    # Create Kheperax Task. 创建实际的任务实例
     (
         env,
         policy_network,
@@ -336,8 +343,9 @@ def run_experiment(
                     # initialising first variables for Map-Elites init
                     random_key, subkey = jax.random.split(random_key)
                     keys = jax.random.split(subkey, num=batch_size)
+                    # 用 JAX 拆出一堆 keys，准备给每个个体一个独立的随机种子
                     fake_batch = jnp.zeros(shape=(batch_size, env.observation_size))
-                    all_sols = jax.vmap(policy_network.init)(keys, fake_batch)
+                    all_sols = jax.vmap(policy_network.init)(keys, fake_batch) # 初始化 archive，开始探索
 
                     # Initialize the dis embed.
                     if use_dis_embed:
@@ -356,8 +364,11 @@ def run_experiment(
                             return_features=True,
                             random_key=random_key,
                         )
+                        # print(features.shape) (150,500)
+                        # n_preference = 50
 
                         dis_embed_data = features.reshape(n_pref_data, 3, -1)
+                        # print(dis_embed_data.shape) (50, 3, 500)
                         dis_embed_gt_measures = gt_measures.reshape(n_pref_data, 3, -1)
                         dis_embed, dis_embed_acc = fit_dis_embed(
                             dis_embed_data,

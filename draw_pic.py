@@ -5,7 +5,7 @@ import argparse
 
 def plot_across_methods(folders, noise_type):
     labels = [os.path.basename(folder.rstrip('/')).replace('_logs', '').capitalize() for folder in folders]
-    colors = ["blue", "green", "orange", "red", "purple", "cyan"]  # 可扩展 , 
+    colors = ["blue", "green", "orange", "red", "purple", "cyan", "gray"]  # 可扩展 , gray brown pink
     fig_qd, ax_qd = plt.subplots()
     fig_cov, ax_cov = plt.subplots()
 
@@ -67,6 +67,6 @@ parser.add_argument('--log_dirs', nargs='+', required=True, help="List of robust
 args = parser.parse_args()
 plot_across_methods(args.log_dirs, args.noise_type)
 
-# python draw_pic.py   --noise_type noisy_labels_exact   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs
-# python draw_pic.py   --noise_type flip_labels_asymmetric   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs
-# python draw_pic.py   --noise_type stochastic   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs
+# python draw_pic.py   --noise_type noisy_labels_exact   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs /mnt/data6t/qdhf/arm/logs/GAPO_logs
+# python draw_pic.py   --noise_type flip_labels_asymmetric   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs /mnt/data6t/qdhf/arm/logs/GAPO_logs
+# python draw_pic.py   --noise_type stochastic   --log_dirs /mnt/data6t/qdhf/arm/logs/reweight_logs /mnt/data6t/qdhf/arm/logs/rDPO_logs /mnt/data6t/qdhf/arm/logs/label_smoothing_logs /mnt/data6t/qdhf/arm/logs/raw_qdhf_logs /mnt/data6t/qdhf/arm/logs/cDPO_logs /mnt/data6t/qdhf/arm/logs/crdo_logs /mnt/data6t/qdhf/arm/logs/GAPO_logs

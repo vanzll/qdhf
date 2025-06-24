@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class RobustLossAgent:
     def __init__(self, margin=0.05):
@@ -29,8 +30,16 @@ class RobustLossAgent:
             epsilon = parameter
             return self.cDPO_triplet_loss(delta_dis, y, epsilon=epsilon)
         
+        elif robust_loss == 'GAPO':
+            epsilon = parameter
+            return self.GAPO_triplet_loss(delta_dis, y, epsilon=epsilon)
+        
         elif robust_loss == 'None':
             loss_fn = lambda y, delta_dis: torch.max(torch.tensor([0.0], device=y.device), 0.05 - y * delta_dis).mean()
+            return loss_fn(y, delta_dis)
+        
+        elif robust_loss == 'log_exp':
+            loss_fn = lambda y, delta_dis: torch.nn.functional.softplus(-y * (delta_dis - 0.00)).mean()
             return loss_fn(y, delta_dis)
         
         elif robust_loss == 'robust_qdhf':
@@ -102,10 +111,16 @@ class RobustLossAgent:
         log_prob_clean   = torch.log(torch.sigmoid(delta_dis * y) + 1e-8)     # as if label = +1
         log_prob_flipped = torch.log(torch.sigmoid(-delta_dis * y) + 1e-8)    # as if label = -1
 
-        # Weighted sum per noisy label distribution
         loss = -((1 - epsilon) * log_prob_clean + epsilon * log_prob_flipped)
         return loss.mean()
-
+    
+    def GAPO_triplet_loss(self, delta_dis, y, epsilon=0.1):
+        y = y.to(delta_dis.device)
+        soft_label = 0.5 * (1 + y * (1 - 2 * epsilon))
+        probs = torch.sigmoid(delta_dis)
+        loss = - (soft_label * torch.log(probs + 1e-8) +
+              (1 - soft_label) * torch.log(1 - probs + 1e-8))
+        return loss.mean()
 
 
 class TripletCDRP(nn.Module):
@@ -166,3 +181,24 @@ class InstanceEarlyStopper:
 
     def get_active_indices(self, all_indices):
         return [idx for idx in all_indices if not self.mask[int(idx)]]
+
+
+class NaPOLoss(torch.nn.Module):
+    def __init__(self, alpha=0.1, min_q=0.01, max_q=1.0):
+        super().__init__()
+        self.alpha = alpha
+        self.min_q = min_q
+        self.max_q = max_q
+
+    def forward(self, delta_dis, y):
+        # Step 1: compute confidence score
+        y = y.to(delta_dis.device)
+        margin = delta_dis*y.detach()  # avoid affecting gradient
+        q = 1.0 - torch.sigmoid(self.alpha * margin)
+        q = torch.clamp(q, self.min_q, self.max_q)
+
+        # Step 2: NaPO loss
+        prob = torch.sigmoid(delta_dis)
+        loss = (1 - prob.pow(q)) / (q + 1e-8)  # avoid division by zero
+
+        return loss.mean()

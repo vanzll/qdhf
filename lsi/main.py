@@ -544,7 +544,7 @@ def run_experiment(
     print(log_file_name, "| QD score:", data[1], "Coverage:", data[2])
     print()
     
-    csv_path = f"/mnt/nvme3n1/qdhf/lsi/{method}_experiment_results.csv"
+    csv_path = f"/lsi/{method}_{noisy_method}_experiment_results.csv"
     header_written = not os.path.exists(csv_path)
     record = {
         "Method": method,

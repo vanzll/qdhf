@@ -93,7 +93,7 @@ def replace_sample(
             np.random.uniform(low=-np.pi, high=np.pi, size=(K, 10)),
             dtype=torch.float32,
             device=device
-        )                               # (K,10)
+        )
 
         n_expand = torch.tensor(
             np.random.uniform(low=-np.pi, high=np.pi, size=(K, 10)),
@@ -117,13 +117,10 @@ def replace_sample(
             raise TypeError(f"Unsupported type for all_sols: {type(all_sols)}")
 
     # ---------- 2. 组装 2K 个 (r,p*,n_old) / (r,p_old,n*) ----------
-    # 将 r 扩展到 (K,10)
     r_tile_p = batch_ref_i.unsqueeze(0).repeat(K, 1)      # (K,10)
     r_tile_n = r_tile_p.clone()
 
-    # (r, new_p, old_n)
     part1 = torch.cat([r_tile_p, p_expand, batch2_i.unsqueeze(0).repeat(K,1)], dim=1)
-    # (r, old_p, new_n)
     part2 = torch.cat([r_tile_n, batch1_i.unsqueeze(0).repeat(K,1), n_expand], dim=1)
 
     new_batch = torch.cat([part1, part2], dim=0)          # (2K, 30)
@@ -185,11 +182,13 @@ def replace_sample(
         new_p = p_expand[best_idx]
         new_n = batch2_i
         new_y = new_lbl_noise[best_idx]
+        new_gt = new_lbl_clean[best_idx]
     else:
         # 选择了 part2 → 更新 n
         idx = best_idx - K
         new_p = batch1_i
         new_n = n_expand[idx]
         new_y = new_lbl_noise[best_idx]
+        new_gt = new_lbl_clean[best_idx]
 
-    return new_p.detach(), new_n.detach(), new_y.detach()
+    return new_p, new_n, new_y, new_gt

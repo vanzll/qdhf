@@ -16,6 +16,8 @@ class NoiseGenerator:
             return self.flip_by_distance(gt, gt_dis, parameter)
         elif noisy_method == 'flip_labels_asymmetric':
             return self.flip_labels_asymmetric(gt, parameter)
+        elif noisy_method == 'None':
+            return gt
         else:
             raise ValueError(f"Unknown noisy_method: {noisy_method}")
 
