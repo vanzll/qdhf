@@ -11,13 +11,14 @@ SESSION="qd_hf_run"
 METHODS=(
   noisy_labels_exact
   stochastic
-  add_equal_noise
-  flip_by_distance
+  #add_equal_noise
+  #flip_by_distance
   flip_labels_asymmetric
 )
 
 # ---- create / configure tmux session ----
-tmux new-session -d -s "$SESSION"
+tmux kill-session -t "$SESSION" 2>/dev/null   # 先删旧会话
+tmux new-session -d -s "$SESSION"             # 再新建
 k=1
 for i in "${!METHODS[@]}"; do
     
